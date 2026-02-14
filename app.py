@@ -15,7 +15,6 @@ from flask import (
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
-import shlex
 import logging
 import time
 
@@ -45,7 +44,16 @@ GIT_AUTHOR_EMAIL = os.environ.get("GIT_AUTHOR_EMAIL")
 # If you want to skip trying to use git altogether, set GIT_SYNC=0
 GIT_SYNC = os.environ.get("GIT_SYNC", "1") != "0"
 # Maximum time for git operations (seconds)
-GIT_TIMEOUT = int(os.environ.get("GIT_TIMEOUT", "15"))
+try:
+    GIT_TIMEOUT = int(os.environ.get("GIT_TIMEOUT", "15"))
+except Exception:
+    GIT_TIMEOUT = 15
+
+# Git destination (required for runtime pushes)
+# Example: https://username:ghp_xxx...@github.com/username/repo.git
+GITHUB_REPO_URL = os.environ.get("GITHUB_REPO_URL")
+GITHUB_REMOTE_NAME = os.environ.get("GITHUB_REMOTE_NAME", "origin")
+GIT_BRANCH = os.environ.get("GIT_BRANCH", "main")
 
 # ----- upload limits (adjust as needed) -----
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
@@ -95,10 +103,10 @@ def git_repo_present():
     return (BASE_DIR / ".git").exists()
 
 
-def run_git_cmd(args, timeout=GIT_TIMEOUT):
+def run_git_cmd(args, timeout=GIT_TIMEOUT, env=None):
     try:
         logger.info("git %s", " ".join(args))
-        r = subprocess.run(["git"] + args, cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        r = subprocess.run(["git"] + args, cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, env=env)
         out = r.stdout.decode("utf-8", errors="replace").strip()
         err = r.stderr.decode("utf-8", errors="replace").strip()
         return r.returncode, out, err
@@ -108,6 +116,54 @@ def run_git_cmd(args, timeout=GIT_TIMEOUT):
         return 1, "", "git not installed"
     except Exception as e:
         return 1, "", str(e)
+
+
+def ensure_git_identity():
+    """
+    Ensure local repo has user.name and user.email configured (local config).
+    Use GIT_AUTHOR_NAME and GIT_AUTHOR_EMAIL env vars when present.
+    """
+    name = GIT_AUTHOR_NAME or os.environ.get("GIT_COMMITTER_NAME") or "auto-committer"
+    email = GIT_AUTHOR_EMAIL or os.environ.get("GIT_COMMITTER_EMAIL") or "noreply@localhost"
+    # set repo-local config (won't affect global)
+    run_git_cmd(["config", "user.name", name])
+    run_git_cmd(["config", "user.email", email])
+    logger.info("git identity set: %s <%s>", name, email)
+
+
+def ensure_remote_configured():
+    """
+    Ensure the remote (GITHUB_REMOTE_NAME) is set to GITHUB_REPO_URL.
+    If not, add or set it.
+    Returns True if remote is now configured, False otherwise.
+    """
+    if not GITHUB_REPO_URL:
+        logger.info("No GITHUB_REPO_URL provided; skipping remote configuration")
+        return False
+
+    rc, out, err = run_git_cmd(["remote", "get-url", GITHUB_REMOTE_NAME])
+    if rc == 0:
+        if out.strip() == GITHUB_REPO_URL.strip():
+            logger.info("Remote %s already configured", GITHUB_REMOTE_NAME)
+            return True
+        else:
+            # remote exists but different URL — update it
+            rc2, o2, e2 = run_git_cmd(["remote", "set-url", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
+            if rc2 == 0:
+                logger.info("Remote %s url updated", GITHUB_REMOTE_NAME)
+                return True
+            else:
+                logger.warning("Failed to set remote url: %s", e2 or o2)
+                return False
+    else:
+        # add remote
+        rc2, o2, e2 = run_git_cmd(["remote", "add", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
+        if rc2 == 0:
+            logger.info("Remote %s added", GITHUB_REMOTE_NAME)
+            return True
+        else:
+            logger.warning("Failed to add remote: %s", e2 or o2)
+            return False
 
 
 def push_to_git(paths=None, message=None, include_media=False):
@@ -122,12 +178,29 @@ def push_to_git(paths=None, message=None, include_media=False):
         logger.info("GIT_SYNC disabled via env; skipping git push")
         return False
 
+    # Initialize git if missing and GITHUB_REPO_URL is set
+    if not git_repo_present():
+        logger.info(".git not present. Initializing git repository.")
+        rc, out, err = run_git_cmd(["init"])
+        if rc != 0:
+            logger.warning("git init failed: %s", err or out)
+            # continue; maybe subsequent operations will still work
+        # ensure remote if URL provided
+        if GITHUB_REPO_URL:
+            rc2, o2, e2 = run_git_cmd(["remote", "add", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
+            if rc2 != 0:
+                logger.warning("git remote add failed: %s", e2 or o2)
+
+    # If remote not configured, try to configure it
+    if GITHUB_REPO_URL:
+        ensure_remote_configured()
+
     if not git_repo_present():
         logger.info("No .git repo found under %s — skipping git operations", BASE_DIR)
         return False
 
+    # Create snapshot paths if not provided
     if paths is None:
-        # create snapshots and return their relative paths
         try:
             conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
             paths = snapshot_data_to_json(conn)
@@ -138,25 +211,26 @@ def push_to_git(paths=None, message=None, include_media=False):
 
     # optionally add uploaded media files (only when explicitly enabled)
     if include_media and GIT_COMMIT_MEDIA:
-        # include entire videos dir (may be large!)
         paths.append(str(Path("static") / "videos"))
 
     # normalize paths and ensure there is something to add
     paths = [str(Path(p)) for p in paths if p]
     if not paths:
         logger.info("no paths to commit")
-        return False
+        return True
 
-    # run git add for each path
     try:
+        # ensure local git identity exists
+        ensure_git_identity()
+
+        # run git add for each path
         add_args = ["add", "--"] + paths
         rc, out, err = run_git_cmd(add_args)
         if rc != 0:
-            logger.warning("git add failed: %s", err or out)
-            # continue — maybe there are no changes
+            logger.warning("git add returned non-zero: %s", err or out)
 
         # check for staged changes
-        rc, status_out, status_err = run_git_cmd(["status", "--porcelain"]) 
+        rc, status_out, status_err = run_git_cmd(["status", "--porcelain"])
         if rc != 0:
             logger.warning("git status failed: %s", status_err or status_out)
 
@@ -164,7 +238,9 @@ def push_to_git(paths=None, message=None, include_media=False):
             logger.info("no changes to commit")
             return True
 
+        # commit
         commit_message = message or f"autosave: snapshot {datetime.utcnow().isoformat()}"
+        # also set GIT_AUTHOR_* env values for subprocess commit if provided
         env = os.environ.copy()
         if GIT_AUTHOR_NAME:
             env["GIT_AUTHOR_NAME"] = GIT_AUTHOR_NAME
@@ -173,23 +249,36 @@ def push_to_git(paths=None, message=None, include_media=False):
             env["GIT_AUTHOR_EMAIL"] = GIT_AUTHOR_EMAIL
             env["GIT_COMMITTER_EMAIL"] = GIT_AUTHOR_EMAIL
 
-        # use subprocess.run so we can pass env
         logger.info("Committing with message: %s", commit_message)
         p = subprocess.run(["git", "commit", "-m", commit_message], cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
         pout = p.stdout.decode("utf-8", errors="replace").strip()
         perr = p.stderr.decode("utf-8", errors="replace").strip()
         if p.returncode != 0:
-            logger.warning("git commit failed: %s", perr or pout)
-            # do not abort, maybe commit failed due to hooks; still try to push
+            logger.warning("git commit failed (non-fatal): %s", perr or pout)
+            # continue anyway to attempt push
 
-        # finally push
-        rc, out, err = run_git_cmd(["push"], timeout=GIT_TIMEOUT * 2)
-        if rc != 0:
-            logger.warning("git push failed: %s", err or out)
+        # If remote exists, push to the configured branch
+        rc_remote, remote_out, remote_err = run_git_cmd(["remote", "get-url", GITHUB_REMOTE_NAME])
+        if rc_remote != 0:
+            logger.warning("No configured remote '%s' - cannot push", GITHUB_REMOTE_NAME)
             return False
 
-        logger.info("git push OK: %s", out)
-        return True
+        # attempt push with upstream set (push -u origin <branch>)
+        push_args = ["push", GITHUB_REMOTE_NAME, f"{GIT_BRANCH}", "--set-upstream"]
+        rc_push, out_push, err_push = run_git_cmd(push_args, timeout=GIT_TIMEOUT * 2, env=env)
+        if rc_push != 0:
+            # fallback: try plain git push (maybe upstream already set)
+            rc2, out2, err2 = run_git_cmd(["push"], timeout=GIT_TIMEOUT * 2, env=env)
+            if rc2 != 0:
+                logger.warning("git push failed: %s", err2 or out2)
+                return False
+            else:
+                logger.info("git push OK (fallback): %s", out2)
+                return True
+        else:
+            logger.info("git push OK: %s", out_push)
+            return True
+
     except Exception as e:
         logger.exception("git push exception: %s", e)
         return False
@@ -945,4 +1034,3 @@ def pulse_receiver():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
