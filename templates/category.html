@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Category - {{ category }}</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <main class="container">
+    <a href="/">← Home</a>
+    <h1>Category: {{ category }}</h1>
+    <div id="list"></div>
+    <footer><small>All rights reserved — Tomorrow Technology Company</small></footer>
+  </main>
+  <script src="/static/js/idb.js"></script>
+  <script>
+    async function load() {
+      const resp = await fetch('/api/routines');
+      const data = await resp.json();
+      const list = document.getElementById('list');
+      data.filter(r=>r.category==="{{ category }}").forEach(r=>{
+        const el = document.createElement('div');
+        el.className='routineCard';
+        el.innerHTML = `<h3>${r.title}</h3><p>${r.description}</p><a href="/routine/${r.id}">Open</a>`;
+        list.appendChild(el);
+      });
+    }
+    load();
+  </script>
+</body>
+</html>

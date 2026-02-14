@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Routine</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <main class="container">
+    <a href="/">← Home</a>
+    <div id="content">Loading...</div>
+    <footer><small>All rights reserved — Tomorrow Technology Company</small></footer>
+  </main>
+  <script>
+    const id = {{ routine_id }};
+    async function load(){
+      const resp = await fetch('/api/routines');
+      const data = await resp.json();
+      const r = data.find(x=>x.id===id);
+      const c = document.getElementById('content');
+      if(!r){ c.innerHTML='<p>Not found</p>'; return; }
+      c.innerHTML = `<h1>${r.title}</h1><p>${r.description}</p>`;
+      const vid = document.createElement('video');
+      vid.controls = true;
+      vid.preload = 'metadata';
+      vid.src = r.video_url;
+      vid.addEventListener('play', ()=>{
+        // when user plays, browser will fetch and service worker can cache
+      });
+      c.appendChild(vid);
+    }
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tomorrow Exercise — Admin</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <style>
+    .admin-grid{display:grid;grid-template-columns:1fr 360px;gap:12px}
+    .panel{background:#fff;padding:12px;border-radius:10px;box-shadow:0 8px 24px rgba(6,30,66,0.06)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;text-align:left;border-bottom:1px solid #f1f5fb;font-size:13px}
+    .metrics{display:flex;gap:10px;flex-wrap:wrap}
+    .metric{background:linear-gradient(180deg,#fff,#f7fbff);padding:10px;border-radius:8px;min-width:140px;text-align:center}
+    .small-muted{font-size:12px;color:#6b7a91}
+    .auth-box{max-width:420px;margin:40px auto}
+    .hidden{display:none}
+    input[type="file"]{border:1px dashed #e6eefc;padding:8px;border-radius:8px;width:100%}
+    .meta-row{display:flex;gap:8px}
+    .meta-row input, .meta-row select{flex:1;padding:10px;border-radius:8px;border:1px solid #eef6ff}
+    .video-row{display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #f1f5fb}
+    .video-thumb{width:90px;height:60px;border-radius:6px;background:#eef6ff;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    .video-thumb img{width:100%;height:100%;object-fit:cover}
+    .video-meta{flex:1}
+    .video-actions{display:flex;gap:6px;flex-direction:column}
+    .small-btn{padding:6px 8px;border-radius:8px;border:0;font-weight:600}
+  </style>
+</head>
+<body>
+
+<main class="container" style="max-width:1100px">
+
+  <!-- ===== AUTH AREA ===== -->
+  <section id="authArea" class="auth-box panel">
+    <h2 id="authTitle">Admin</h2>
+
+    <form id="registerForm" class="hidden">
+      <h3>Create Admin</h3>
+      <input name="username" placeholder="Admin name" required />
+      <input name="password" type="password" placeholder="Password" required />
+      <button class="btn primary" style="margin-top:10px;width:100%">Register</button>
+      <div id="registerStatus" class="small-muted"></div>
+    </form>
+
+    <form id="loginForm" class="hidden">
+      <h3>Admin Login</h3>
+      <input name="username" placeholder="Admin name" required />
+      <input name="password" type="password" placeholder="Password" required />
+      <button class="btn primary" style="margin-top:10px;width:100%">Login</button>
+      <div id="loginStatus" class="small-muted"></div>
+    </form>
+  </section>
+
+  <!-- ===== DASHBOARD ===== -->
+  <section id="dashboard" class="hidden">
+
+    <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h1>Admin Dashboard</h1>
+      <button id="logoutBtn" class="btn small">Logout</button>
+    </header>
+
+    <div class="admin-grid">
+      <div>
+        <div class="panel" style="margin-bottom:12px">
+          <h3>Videos (Upload)</h3>
+
+          <!-- Form now uses a category dropdown -->
+          <form id="uploadForm" enctype="multipart/form-data">
+            <label style="display:block;margin-bottom:8px">Choose files to upload (you can pick multiple)</label>
+            <input type="file" name="video_files" multiple accept="video/*" />
+
+            <div style="height:8px"></div>
+
+            <div class="meta-row" style="margin-bottom:8px">
+              <input name="title" placeholder="Title (applies to each uploaded file by default)" />
+              <select name="category" id="categorySelect" aria-label="Select category">
+                <option value="Strength">Strength</option>
+                <option value="Cardio">Cardio</option>
+                <option value="Flexibility">Flexibility</option>
+                <option value="Elderly">Elderly</option>
+                <option value="Special">Special Programs</option>
+              </select>
+            </div>
+
+            <div class="meta-row" style="margin-bottom:8px">
+              <input name="difficulty" placeholder="Difficulty" />
+              <input name="duration" placeholder="Duration (seconds)" type="number" />
+            </div>
+
+            <textarea name="description" placeholder="Short description (applies to each upload)"></textarea>
+
+            <div style="margin:8px 0" class="small-muted">
+              Or paste a remote video link (optional) — if you paste a URL we will use the URL instead of files.
+            </div>
+            <input name="video_url" placeholder="Video URL (optional)" />
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+              <button class="btn primary">Upload</button>
+            </div>
+          </form>
+
+          <div id="uploadStatus" class="small-muted" style="margin-top:8px"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Videos</h3>
+          <div id="videosList" style="max-height:480px;overflow:auto"></div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="panel" style="margin-bottom:12px">
+          <h3>Metrics</h3>
+          <div class="metrics">
+            <div class="metric"><div id="mUsers">—</div><div class="small-muted">Total users</div></div>
+            <div class="metric"><div id="mVisits">—</div><div class="small-muted">Total visits</div></div>
+            <div class="metric"><div id="mVideos">—</div><div class="small-muted">Videos</div></div>
+            <div class="metric"><div id="mPlays">—</div><div class="small-muted">Total plays</div></div>
+            <div class="metric"><div id="mReminders">—</div><div class="small-muted">Reminders set</div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Make user admin</h3>
+          <input id="promoteUserId" placeholder="user id" />
+          <button id="promoteBtn" class="btn small">Promote</button>
+          <div id="promoteStatus" class="small-muted"></div>
+        </div>
+      </aside>
+    </div>
+
+  </section>
+</main>
+
+<script>
+/* ================= AUTH FLOW (same as before) ================= */
+
+const authArea = document.getElementById('authArea');
+const registerForm = document.getElementById('registerForm');
+const loginForm = document.getElementById('loginForm');
+const dashboard = document.getElementById('dashboard');
+
+/* check if admin exists */
+async function checkAdminExists(){
+  const res = await fetch('/api/admin/exists');
+  const j = await res.json();
+
+  if(j.admin_exists){
+    loginForm.classList.remove('hidden');
+  } else {
+    registerForm.classList.remove('hidden');
+  }
+}
+
+/* register admin */
+registerForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(registerForm);
+  const body = Object.fromEntries(fd.entries());
+
+  const res = await fetch('/api/admin/register',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+
+  const txt = await res.text();
+  if(!res.ok){
+    document.getElementById('registerStatus').innerText = txt;
+    return;
+  }
+
+  startDashboard();
+});
+
+/* login admin */
+loginForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(loginForm);
+  const body = Object.fromEntries(fd.entries());
+
+  const res = await fetch('/api/admin/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+
+  const txt = await res.text();
+  if(!res.ok){
+    document.getElementById('loginStatus').innerText = txt;
+    return;
+  }
+
+  startDashboard();
+});
+
+/* logout */
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  await fetch('/api/admin/logout',{method:'POST'});
+  location.reload();
+});
+
+/* ================= DASHBOARD ================= */
+
+function startDashboard(){
+  authArea.classList.add('hidden');
+  dashboard.classList.remove('hidden');
+  fetchUsers();
+  fetchMetrics();
+  fetchVideos();
+}
+
+async function fetchUsers(){
+  const res = await fetch('/api/admin/users');
+  if(!res.ok) return;
+  const users = await res.json();
+
+  const c = document.getElementById('usersList');
+  c && (c.innerHTML = '');
+
+  if(!c) return;
+  if(users.length===0){
+    c.innerHTML = '<p class="small-muted">No users yet.</p>';
+    return;
+  }
+
+  users.forEach(u=>{
+    const el = document.createElement('div');
+    el.style.padding='8px';
+    el.style.borderBottom='1px solid #f1f5fb';
+    el.innerHTML = `
+      <strong>${u.username}</strong>
+      <span class="small-muted">#${u.id} — ${u.country}</span><br/>
+      <span class="small-muted">
+        visits:${u.visits} reminders:${u.reminders_set}
+      </span>
+      <div style="margin-top:6px">
+        <button class="btn small" onclick="fillPromote(${u.id})">Select</button>
+      </div>`;
+    c.appendChild(el);
+  });
+}
+
+function fillPromote(id){
+  document.getElementById('promoteUserId').value = id;
+}
+
+async function fetchMetrics(){
+  const res = await fetch('/api/admin/metrics');
+  if(!res.ok) return;
+  const m = await res.json();
+
+  document.getElementById('mUsers').innerText = m.total_users;
+  document.getElementById('mVisits').innerText = m.total_visits;
+  document.getElementById('mVideos').innerText = m.total_videos;
+  document.getElementById('mPlays').innerText = m.total_plays;
+  document.getElementById('mReminders').innerText = m.reminders_set;
+}
+
+/* ======= UPLOAD HANDLER (supports multiple files or fallback URL) ======= */
+document.getElementById('uploadForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const form = e.target;
+  const fileInput = form.querySelector('input[name="video_files"]');
+
+  // If files selected -> send multipart/form-data to upload_file endpoint
+  if (fileInput && fileInput.files && fileInput.files.length > 0) {
+    const fd = new FormData(form); // includes files + other fields
+    // Do NOT set Content-Type header — browser will set multipart boundary.
+    const res = await fetch('/api/admin/upload_file', {
+      method: 'POST',
+      body: fd
+    });
+
+    if(!res.ok){
+      const txt = await res.text();
+      document.getElementById('uploadStatus').innerText = 'Upload failed: ' + txt;
+      return;
+    }
+
+    const j = await res.json();
+    const urls = j.video_urls || [];
+    document.getElementById('uploadStatus').innerText =
+      'Uploaded ' + urls.length + ' file(s): ' + (urls.join(', ') || '');
+    fetchMetrics();
+    fetchVideos();
+    return;
+  }
+
+  // Otherwise fallback to video_url (remote link)
+  const fd2 = new FormData(form);
+  const plain = Object.fromEntries(fd2.entries());
+  if(!plain.video_url){
+    document.getElementById('uploadStatus').innerText = 'Select files or paste a Video URL.';
+    return;
+  }
+
+  const res = await fetch('/api/admin/upload_video', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(plain)
+  });
+
+  const txt = await res.text();
+  if(!res.ok){
+    document.getElementById('uploadStatus').innerText = 'Upload failed: ' + txt;
+    return;
+  }
+
+  document.getElementById('uploadStatus').innerText = 'Uploaded via URL.';
+  fetchMetrics();
+  fetchVideos();
+});
+
+/* ======= Videos listing / delete / replace ======= */
+async function fetchVideos(){
+  const res = await fetch('/api/admin/videos');
+  if(!res.ok) return;
+  const vids = await res.json();
+  const container = document.getElementById('videosList');
+  container.innerHTML = '';
+
+  if(vids.length === 0){
+    container.innerHTML = '<p class="small-muted">No videos uploaded yet.</p>';
+    return;
+  }
+
+  vids.forEach(v=>{
+    const row = document.createElement('div');
+    row.className = 'video-row';
+    row.innerHTML = `
+      <div class="video-thumb">
+        ${v.thumbnail_url ? `<img src="${v.thumbnail_url}" alt="thumb">` : `<div style="padding:8px;color:#7b8aa6">${v.category||''}</div>`}
+      </div>
+      <div class="video-meta">
+        <div style="font-weight:700">${v.title || 'Untitled'}</div>
+        <div class="small-muted">${v.category || ''} • ${v.difficulty || ''} • ${v.duration || 0}s</div>
+        <div class="small-muted" style="margin-top:6px">${(v.description||'').slice(0,120)}</div>
+      </div>
+      <div class="video-actions" data-id="${v.id}">
+        <button class="small-btn" onclick="promptDelete(${v.id})">Delete</button>
+        <label style="font-size:12px" class="small-muted">Replace file:</label>
+        <input type="file" accept="video/*" onchange="handleReplace(${v.id}, this)" />
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function promptDelete(id){
+  if(!confirm('Delete this video permanently?')) return;
+  deleteVideo(id);
+}
+
+async function deleteVideo(id){
+  const res = await fetch('/api/admin/delete_video', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({routine_id: id})
+  });
+  if(!res.ok){
+    const t = await res.text();
+    alert('Delete failed: '+t);
+    return;
+  }
+  fetchMetrics();
+  fetchVideos();
+}
+
+async function handleReplace(id, input){
+  if(!input.files || input.files.length === 0) return;
+  const file = input.files[0];
+  const fd = new FormData();
+  fd.append('video_file', file);
+  fd.append('routine_id', id);
+
+  // optional: send new title/description if you want
+  const res = await fetch('/api/admin/replace_video', { method: 'POST', body: fd });
+  if(!res.ok){
+    const t = await res.text();
+    alert('Replace failed: '+t);
+    return;
+  }
+  fetchMetrics();
+  fetchVideos();
+}
+
+/* promote */
+document.getElementById('promoteBtn').addEventListener('click', async ()=>{
+  const id = document.getElementById('promoteUserId').value;
+  if(!id) return alert('enter user id');
+
+  const res = await fetch('/api/admin/promote',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({user_id:id})
+  });
+
+  const j = await res.json();
+  document.getElementById('promoteStatus').innerText = JSON.stringify(j);
+  fetchUsers(); fetchMetrics();
+});
+
+/* start */
+checkAdminExists();
+</script>
+</body>
+</html>
