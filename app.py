@@ -1,4 +1,8 @@
-# app.py
+# app_with_github_sync.py
+# Modified from user's original app.py to snapshot DB data and (optionally) uploaded media
+# to a git repository inside the project directory. This file attempts to commit JSON
+# snapshots after key operations (user register, admin uploads, metric updates, etc.)
+
 from pathlib import Path
 import sqlite3
 import os
@@ -10,23 +14,188 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+import json
+import shlex
+import logging
+import time
+
+# --- basic logging ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "data.db"
 VIDEOS_DIR = BASE_DIR / "static" / "videos"
 THUMBS_DIR = VIDEOS_DIR / "thumbnails"
+SNAPSHOT_DIR = BASE_DIR / "data_snapshot"
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 THUMBS_DIR.mkdir(parents=True, exist_ok=True)
+SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 # set a secret key for sessions (in production set FLASK_SECRET env var)
 app.secret_key = os.environ.get("FLASK_SECRET") or secrets.token_urlsafe(32)
 
+# Environment flags (customize via environment variables)
+# If you want uploaded video files to be committed into git, set GIT_COMMIT_MEDIA=1
+GIT_COMMIT_MEDIA = os.environ.get("GIT_COMMIT_MEDIA", "0") == "1"
+# Optionally set git author details used for automated commits
+GIT_AUTHOR_NAME = os.environ.get("GIT_AUTHOR_NAME")
+GIT_AUTHOR_EMAIL = os.environ.get("GIT_AUTHOR_EMAIL")
+# If you want to skip trying to use git altogether, set GIT_SYNC=0
+GIT_SYNC = os.environ.get("GIT_SYNC", "1") != "0"
+# Maximum time for git operations (seconds)
+GIT_TIMEOUT = int(os.environ.get("GIT_TIMEOUT", "15"))
+
 # ----- upload limits (adjust as needed) -----
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 
 
-# ---------- DB initialization + safe migrations ----------
+# ---------- helper: Snapshot DB to JSON files that are safe to commit ----------
+def snapshot_data_to_json(conn):
+    """
+    Dump important tables to JSON files in data_snapshot/ and return list of file paths
+    This avoids committing large binaries (videos) unless explicitly enabled.
+    """
+    try:
+        out_files = []
+        cur = conn.execute("SELECT id,username,age,country,occupation,admin,api_key,visits,reminders_set,last_seen,created_at FROM users ORDER BY id")
+        users = [dict(zip([c[0] for c in cur.description], row)) for row in cur.fetchall()]
+        ufile = SNAPSHOT_DIR / "users.json"
+        ufile.write_text(json.dumps(users, default=str, indent=2), encoding="utf-8")
+        out_files.append(str(ufile.relative_to(BASE_DIR)))
+
+        cur = conn.execute(
+            "SELECT id,title,category,difficulty,duration,video_url,thumbnail_url,description,uploaded_by,uploaded_at,views FROM routines ORDER BY id"
+        )
+        routines = [dict(zip([c[0] for c in cur.description], row)) for row in cur.fetchall()]
+        rfile = SNAPSHOT_DIR / "routines.json"
+        rfile.write_text(json.dumps(routines, default=str, indent=2), encoding="utf-8")
+        out_files.append(str(rfile.relative_to(BASE_DIR)))
+
+        cur = conn.execute("SELECT id,user_id,routine_id,played_at FROM plays ORDER BY id")
+        plays = [dict(zip([c[0] for c in cur.description], row)) for row in cur.fetchall()]
+        pfile = SNAPSHOT_DIR / "plays.json"
+        pfile.write_text(json.dumps(plays, default=str, indent=2), encoding="utf-8")
+        out_files.append(str(pfile.relative_to(BASE_DIR)))
+
+        # Optionally snapshot the DB file itself (NOTE: this commits a binary sqlite DB)
+        dbfile = DB_PATH
+        if dbfile.exists():
+            out_files.append(str(dbfile.relative_to(BASE_DIR)))
+
+        return out_files
+    except Exception as e:
+        logger.exception("snapshot failed: %s", e)
+        return []
+
+
+# ---------- helper: git operations (add/commit/push) ----------
+def git_repo_present():
+    return (BASE_DIR / ".git").exists()
+
+
+def run_git_cmd(args, timeout=GIT_TIMEOUT):
+    try:
+        logger.info("git %s", " ".join(args))
+        r = subprocess.run(["git"] + args, cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        out = r.stdout.decode("utf-8", errors="replace").strip()
+        err = r.stderr.decode("utf-8", errors="replace").strip()
+        return r.returncode, out, err
+    except subprocess.TimeoutExpired:
+        return 1, "", "git command timed out"
+    except FileNotFoundError:
+        return 1, "", "git not installed"
+    except Exception as e:
+        return 1, "", str(e)
+
+
+def push_to_git(paths=None, message=None, include_media=False):
+    """
+    paths: list of relative paths (strings) to add to git. If None the function will snapshot the DB
+    and add the snapshot files (and DB if present).
+
+    This function is best-effort: it logs errors but doesn't raise so app requests won't fail
+    if git is unavailable or push fails.
+    """
+    if not GIT_SYNC:
+        logger.info("GIT_SYNC disabled via env; skipping git push")
+        return False
+
+    if not git_repo_present():
+        logger.info("No .git repo found under %s — skipping git operations", BASE_DIR)
+        return False
+
+    if paths is None:
+        # create snapshots and return their relative paths
+        try:
+            conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+            paths = snapshot_data_to_json(conn)
+            conn.close()
+        except Exception as e:
+            logger.exception("could not snapshot DB for git push: %s", e)
+            paths = []
+
+    # optionally add uploaded media files (only when explicitly enabled)
+    if include_media and GIT_COMMIT_MEDIA:
+        # include entire videos dir (may be large!)
+        paths.append(str(Path("static") / "videos"))
+
+    # normalize paths and ensure there is something to add
+    paths = [str(Path(p)) for p in paths if p]
+    if not paths:
+        logger.info("no paths to commit")
+        return False
+
+    # run git add for each path
+    try:
+        add_args = ["add", "--"] + paths
+        rc, out, err = run_git_cmd(add_args)
+        if rc != 0:
+            logger.warning("git add failed: %s", err or out)
+            # continue — maybe there are no changes
+
+        # check for staged changes
+        rc, status_out, status_err = run_git_cmd(["status", "--porcelain"]) 
+        if rc != 0:
+            logger.warning("git status failed: %s", status_err or status_out)
+
+        if not status_out.strip():
+            logger.info("no changes to commit")
+            return True
+
+        commit_message = message or f"autosave: snapshot {datetime.utcnow().isoformat()}"
+        env = os.environ.copy()
+        if GIT_AUTHOR_NAME:
+            env["GIT_AUTHOR_NAME"] = GIT_AUTHOR_NAME
+            env["GIT_COMMITTER_NAME"] = GIT_AUTHOR_NAME
+        if GIT_AUTHOR_EMAIL:
+            env["GIT_AUTHOR_EMAIL"] = GIT_AUTHOR_EMAIL
+            env["GIT_COMMITTER_EMAIL"] = GIT_AUTHOR_EMAIL
+
+        # use subprocess.run so we can pass env
+        logger.info("Committing with message: %s", commit_message)
+        p = subprocess.run(["git", "commit", "-m", commit_message], cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
+        pout = p.stdout.decode("utf-8", errors="replace").strip()
+        perr = p.stderr.decode("utf-8", errors="replace").strip()
+        if p.returncode != 0:
+            logger.warning("git commit failed: %s", perr or pout)
+            # do not abort, maybe commit failed due to hooks; still try to push
+
+        # finally push
+        rc, out, err = run_git_cmd(["push"], timeout=GIT_TIMEOUT * 2)
+        if rc != 0:
+            logger.warning("git push failed: %s", err or out)
+            return False
+
+        logger.info("git push OK: %s", out)
+        return True
+    except Exception as e:
+        logger.exception("git push exception: %s", e)
+        return False
+
+
+# ---------- DB initialization + safe migrations (unchanged) ----------
 def init_db():
     conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
@@ -89,7 +258,7 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
             conn.commit()
         except Exception as e:
-            print("Could not add password_hash column:", e)
+            logger.info("Could not add password_hash column: %s", e)
 
     # ensure routines has thumbnail_url column (older DBs might not)
     rcols = [r[1] for r in conn.execute("PRAGMA table_info(routines)").fetchall()]
@@ -98,7 +267,7 @@ def init_db():
             conn.execute("ALTER TABLE routines ADD COLUMN thumbnail_url TEXT")
             conn.commit()
         except Exception as e:
-            print("Could not add thumbnail_url column:", e)
+            logger.info("Could not add thumbnail_url column: %s", e)
 
     # Deduplicate legacy duplicates (if any): aggregate visits, reminders, keep earliest created
     try:
@@ -127,7 +296,7 @@ def init_db():
             conn.executemany("DELETE FROM users WHERE id = ?", [(i,) for i in other_ids])
         conn.commit()
     except Exception as e:
-        print("dedupe error:", e)
+        logger.info("dedupe error: %s", e)
 
     conn.close()
 
@@ -175,11 +344,10 @@ def generate_thumbnail(video_path: Path, thumb_path: Path):
             "-q:v", "2",
             str(thumb_path),
         ]
-        # run but don't raise on non-zero exit, we'll check file existence
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=20)
         return thumb_path.exists()
     except Exception as e:
-        print("thumbnail generation failed:", e)
+        logger.info("thumbnail generation failed: %s", e)
         return False
 
 
@@ -191,11 +359,6 @@ def admin_exists():
 
 
 def require_admin():
-    """
-    Require admin auth. Accepts:
-      - session['admin_id'] (preferred) OR
-      - X-Admin-Key header (legacy)
-    """
     db = get_db()
     admin_id = session.get("admin_id")
     if admin_id:
@@ -218,7 +381,6 @@ def require_admin():
 # ---------- serve manifest explicitly (helps with correct MIME) ----------
 @app.route('/manifest.json')
 def manifest():
-    # Serve the manifest from static with the application/manifest+json mimetype
     return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
 
 
@@ -261,9 +423,6 @@ def api_routines():
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    """
-    Normal app user registration (index flow). Unchanged.
-    """
     data = request.get_json() or request.form
     username = (data.get("username") or "").strip()
     try:
@@ -279,7 +438,6 @@ def api_register():
     db = get_db()
     now = datetime.utcnow()
 
-    # upsert behaviour: if user exists, update and increment visits
     cur = db.execute("SELECT * FROM users WHERE username = ? AND country = ?", (username, country))
     user = cur.fetchone()
 
@@ -289,10 +447,15 @@ def api_register():
             (age, occupation, now, user["id"]),
         )
         db.commit()
+        # snapshot & push
+        try:
+            push_to_git(paths=None, message=f"user update: {username} ({country})", include_media=False)
+        except Exception:
+            logger.exception("git push failed after user update")
+
         cur = db.execute("SELECT * FROM users WHERE id = ?", (user["id"],))
         user = cur.fetchone()
         resp = row_to_dict(user)
-        # do not return admin secrets
         resp.pop("password_hash", None)
         if resp.get("admin"):
             resp["admin_api_key"] = resp.get("api_key")
@@ -300,13 +463,20 @@ def api_register():
 
     # create new normal user
     cur = db.execute("SELECT COUNT(1) AS cnt FROM users WHERE admin = 1")
-    _ = cur.fetchone()  # check only; we do NOT make normal user admin here
+    _ = cur.fetchone()
 
     cur = db.execute(
         "INSERT INTO users (username, age, country, occupation, admin, api_key, visits, last_seen) VALUES (?,?,?,?,?,?,?,?)",
         (username, age, country, occupation, 0, None, 1, now),
     )
     db.commit()
+
+    # snapshot & push (best-effort)
+    try:
+        push_to_git(paths=None, message=f"user register: {username} ({country})", include_media=False)
+    except Exception:
+        logger.exception("git push failed after user register")
+
     user_id = cur.lastrowid
     new_user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     resp = row_to_dict(new_user)
@@ -328,6 +498,12 @@ def api_visit():
         (now, username, country),
     )
     db.commit()
+
+    try:
+        push_to_git(paths=None, message=f"visit: {username} ({country})", include_media=False)
+    except Exception:
+        logger.exception("git push failed after visit")
+
     return jsonify({"ok": True})
 
 
@@ -350,6 +526,12 @@ def api_track_play():
     db.execute("UPDATE routines SET views = views + 1 WHERE id = ?", (routine_id,))
     db.execute("INSERT INTO plays (user_id, routine_id) VALUES (?,?)", (user_id, routine_id))
     db.commit()
+
+    try:
+        push_to_git(paths=None, message=f"play: user {username} played {routine_id}", include_media=False)
+    except Exception:
+        logger.exception("git push failed after track_play")
+
     return jsonify({"ok": True})
 
 
@@ -364,13 +546,18 @@ def api_set_reminder():
     db = get_db()
     db.execute("UPDATE users SET reminders_set = ? WHERE username = ? AND country = ?", (1 if enabled else 0, username, country))
     db.commit()
+
+    try:
+        push_to_git(paths=None, message=f"reminder: {username} ({country}) => {enabled}", include_media=False)
+    except Exception:
+        logger.exception("git push failed after set_reminder")
+
     return jsonify({"ok": True})
 
 
 # ---------- admin registration & login (username + password) ----------
 @app.route("/api/admin/exists")
 def api_admin_exists():
-    """Return whether an admin user already exists (used by admin UI)."""
     db = get_db()
     cur = db.execute("SELECT COUNT(1) AS cnt FROM users WHERE admin = 1")
     exists = cur.fetchone()["cnt"] > 0
@@ -379,10 +566,6 @@ def api_admin_exists():
 
 @app.route("/api/admin/register", methods=["POST"])
 def api_admin_register():
-    """
-    Register the first admin using username + password only.
-    This is only allowed when no admin exists.
-    """
     if admin_exists():
         return jsonify({"error": "admin already exists"}), 403
 
@@ -397,23 +580,25 @@ def api_admin_register():
     now = datetime.utcnow()
 
     db = get_db()
-    # store admin using special country marker so normal users won't collide
     cur = db.execute(
         "INSERT INTO users (username, age, country, occupation, admin, api_key, password_hash, visits, last_seen) VALUES (?,?,?,?,?,?,?,?,?)",
         (username, 0, "__admin__", "", 1, api_key, password_hash, 0, now),
     )
     db.commit()
     admin_id = cur.lastrowid
-    # create session
     session['admin_id'] = admin_id
+
+    # snapshot & push admin creation
+    try:
+        push_to_git(paths=None, message=f"admin created: {username}", include_media=False)
+    except Exception:
+        logger.exception("git push failed after admin register")
+
     return jsonify({"ok": True, "admin_id": admin_id})
 
 
 @app.route("/api/admin/login", methods=["POST"])
 def api_admin_login():
-    """
-    Login admin with username+password. Sets a session cookie on success.
-    """
     data = request.get_json() or request.form
     username = (data.get("username") or "").strip()
     password = (data.get("password") or "").strip()
@@ -421,23 +606,19 @@ def api_admin_login():
         return jsonify({"error": "username and password required"}), 400
 
     db = get_db()
-    # find admin user — prefer "__admin__" country for primary admin accounts
     cur = db.execute("SELECT * FROM users WHERE username = ? AND admin = 1", (username,))
     user = cur.fetchone()
     if not user:
         return jsonify({"error": "admin not found"}), 404
 
-    # sqlite3.Row doesn't have .get, so convert to dict for safe access
     u = row_to_dict(user) or {}
     ph = u.get("password_hash") or ""
     if not ph:
-        # this admin account doesn't have a password (maybe promoted via api); ask to use admin key
         return jsonify({"error": "this admin account does not support password login; use admin key"}), 400
 
     if not check_password_hash(ph, password):
         return jsonify({"error": "invalid password"}), 403
 
-    # success: set session
     session['admin_id'] = user["id"]
     return jsonify({"ok": True, "admin_id": user["id"]})
 
@@ -460,7 +641,6 @@ def api_admin_users():
 
 @app.route("/api/admin/videos")
 def api_admin_videos():
-    """Return all routines for admin UI (including thumbnail_url)."""
     admin = require_admin()
     db = get_db()
     cur = db.execute("SELECT id,title,category,difficulty,duration,video_url,thumbnail_url,description,uploaded_at,views FROM routines ORDER BY uploaded_at DESC")
@@ -491,15 +671,17 @@ def api_admin_upload_video():
         (title, category, difficulty, duration, video_url, description, admin["id"]),
     )
     db.commit()
+
+    try:
+        push_to_git(paths=None, message=f"video metadata added: {title}", include_media=False)
+    except Exception:
+        logger.exception("git push failed after upload_video")
+
     return jsonify({"ok": True})
 
 
 @app.route("/api/admin/upload_file", methods=["POST"])
 def api_admin_upload_file():
-    """
-    Accepts multiple files under 'video_files' OR a single legacy 'video_file'.
-    Generates thumbnails (if ffmpeg present) and inserts routines rows with thumbnail_url.
-    """
     admin = require_admin()
 
     files = request.files.getlist('video_files') or []
@@ -511,7 +693,6 @@ def api_admin_upload_file():
     if not files or all(f.filename == '' for f in files):
         return jsonify({"error": "no video files provided"}), 400
 
-    # form-level metadata
     title_form = (request.form.get("title") or "").strip()
     category = (request.form.get("category") or "Special").strip()
     difficulty = (request.form.get("difficulty") or "medium").strip()
@@ -523,6 +704,7 @@ def api_admin_upload_file():
 
     db = get_db()
     saved_urls = []
+    media_paths = []
 
     for f in files:
         if not f or f.filename == '':
@@ -536,11 +718,11 @@ def api_admin_upload_file():
 
         try:
             f.save(save_path)
+            media_paths.append(str(save_path.relative_to(BASE_DIR)))
         except Exception as e:
-            print(f"failed saving {filename}: {e}")
+            logger.info(f"failed saving {filename}: {e}")
             continue
 
-        # generate thumbnail
         thumb_name = f"{save_name}.jpg"
         thumb_path = THUMBS_DIR / thumb_name
         thumb_created = generate_thumbnail(save_path, thumb_path)
@@ -556,6 +738,13 @@ def api_admin_upload_file():
         saved_urls.append(video_url)
 
     db.commit()
+
+    # snapshot & push; include media only when explicitly enabled
+    try:
+        push_to_git(paths=None, message=f"files uploaded by admin {admin['username'] if admin and 'username' in admin else admin['id']}", include_media=True)
+    except Exception:
+        logger.exception("git push failed after upload_file")
+
     if not saved_urls:
         return jsonify({"error": "no files were saved"}), 500
 
@@ -564,7 +753,6 @@ def api_admin_upload_file():
 
 @app.route("/api/admin/delete_video", methods=["POST"])
 def api_admin_delete_video():
-    """Delete a routine + files"""
     admin = require_admin()
     data = request.get_json() or request.form
     routine_id = data.get("routine_id")
@@ -578,7 +766,6 @@ def api_admin_delete_video():
         return jsonify({"error": "routine not found"}), 404
 
     r = row_to_dict(row)
-    # delete files on disk if present
     try:
         if r.get("video_url"):
             video_path = BASE_DIR / r["video_url"].lstrip("/")
@@ -589,19 +776,22 @@ def api_admin_delete_video():
             if thumb_path.exists():
                 thumb_path.unlink()
     except Exception as e:
-        print("delete file error:", e)
+        logger.info("delete file error: %s", e)
 
     db.execute("DELETE FROM routines WHERE id = ?", (routine_id,))
     db.commit()
+
+    try:
+        # after deleting a routine, snapshot and push; media will not be included by default
+        push_to_git(paths=None, message=f"deleted routine {routine_id}", include_media=False)
+    except Exception:
+        logger.exception("git push failed after delete_video")
+
     return jsonify({"ok": True})
 
 
 @app.route("/api/admin/replace_video", methods=["POST"])
 def api_admin_replace_video():
-    """
-    Replace the video file for a given routine_id with an uploaded 'video_file'.
-    Regenerates thumbnail and updates DB. Old files are removed.
-    """
     admin = require_admin()
     routine_id = request.form.get("routine_id") or (request.args.get("routine_id") if request.args else None)
     if not routine_id:
@@ -630,17 +820,15 @@ def api_admin_replace_video():
     try:
         file.save(save_path)
     except Exception as e:
-        print("replace save failed:", e)
+        logger.info("replace save failed: %s", e)
         return jsonify({"error": "could not save uploaded file"}), 500
 
-    # generate new thumbnail
     thumb_name = f"{save_name}.jpg"
     thumb_path = THUMBS_DIR / thumb_name
     thumb_created = generate_thumbnail(save_path, thumb_path)
     thumbnail_url = f"/static/videos/thumbnails/{thumb_name}" if thumb_created else None
     video_url = f"/static/videos/{save_name}"
 
-    # update DB (optionally update title/description if passed)
     new_title = (request.form.get("title") or r.get("title") or filename).strip()
     new_desc = (request.form.get("description") or r.get("description") or "").strip()
     try:
@@ -650,10 +838,9 @@ def api_admin_replace_video():
         )
         db.commit()
     except Exception as e:
-        print("db update error:", e)
+        logger.info("db update error: %s", e)
         return jsonify({"error": "could not update DB"}), 500
 
-    # remove old files
     try:
         if old_video:
             old_video_path = BASE_DIR / old_video.lstrip("/")
@@ -664,7 +851,12 @@ def api_admin_replace_video():
             if old_thumb_path.exists():
                 old_thumb_path.unlink()
     except Exception as e:
-        print("old-file deletion failed:", e)
+        logger.info("old-file deletion failed: %s", e)
+
+    try:
+        push_to_git(paths=None, message=f"replaced video for routine {routine_id}", include_media=True)
+    except Exception:
+        logger.exception("git push failed after replace_video")
 
     return jsonify({"ok": True, "video_url": video_url, "thumbnail_url": thumbnail_url})
 
@@ -706,6 +898,12 @@ def api_admin_promote():
     new_key = secrets.token_urlsafe(28)
     db.execute("UPDATE users SET admin = 1, api_key = ? WHERE id = ?", (new_key, user_id))
     db.commit()
+
+    try:
+        push_to_git(paths=None, message=f"promote user {user_id} to admin", include_media=False)
+    except Exception:
+        logger.exception("git push failed after promote")
+
     return jsonify({"ok": True, "new_admin_key": new_key})
 
 
