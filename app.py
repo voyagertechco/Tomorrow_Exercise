@@ -2,6 +2,14 @@
 # Modified from user's original app.py to snapshot DB data and (optionally) uploaded media
 # to a git repository inside the project directory. This file attempts to commit JSON
 # snapshots after key operations (user register, admin uploads, metric updates, etc.)
+#
+# Added endpoint:
+#   POST /api/admin/git_push
+#   - requires admin auth (same as other admin endpoints)
+#   - body params:
+#       - include_media: "1"/"true"/"yes" to include media in commit (optional)
+#       - message: commit message override (optional)
+#   - returns JSON with success boolean and gathered git command outputs
 
 from pathlib import Path
 import sqlite3
@@ -995,6 +1003,7 @@ def api_admin_promote():
 
     return jsonify({"ok": True, "new_admin_key": new_key})
 
+
 # --------- pulse receiver (accept pings from breathe / other pingers) ----------
 @app.route("/pulse_receiver", methods=["POST", "GET"])
 def pulse_receiver():
@@ -1031,6 +1040,68 @@ def pulse_receiver():
 
     # reply 200 so pingers know we're alive
     return jsonify({"status": "ok", "received": True}), 200
+
+
+# ---------- Manual git-push test endpoint (admin-protected) ----------
+@app.route("/api/admin/git_push", methods=["POST"])
+def api_admin_git_push():
+    """
+    Trigger a manual git push and return useful git outputs for debugging.
+    Protected by require_admin().
+    Body (json or form):
+      - include_media: optional boolean-like value ("1","true","yes")
+      - message: optional commit message
+    """
+    admin = require_admin()
+
+    data = request.get_json(silent=True) or request.form or {}
+    inc = str(data.get("include_media", "")).lower()
+    include_media = inc in ("1", "true", "yes", "on")
+    message = data.get("message") or f"manual push by admin {admin.get('username', admin.get('id'))} at {datetime.utcnow().isoformat()}"
+
+    details = {}
+    try:
+        # Ensure repo is present / configured first
+        details["git_repo_present_before"] = git_repo_present()
+
+        # Try to push using the app helper
+        pushed = push_to_git(paths=None, message=message, include_media=include_media)
+        details["push_result"] = bool(pushed)
+
+        # Gather some git diagnostics to return
+        rc, out, err = run_git_cmd(["status", "--porcelain"])
+        details["status_porcelain_rc"] = rc
+        details["status_porcelain_out"] = out if out else None
+        details["status_porcelain_err"] = err if err else None
+
+        rc, out, err = run_git_cmd(["remote", "get-url", GITHUB_REMOTE_NAME])
+        details["remote_get_url_rc"] = rc
+        details["remote_get_url_out"] = out if out else None
+        details["remote_get_url_err"] = err if err else None
+
+        rc, out, err = run_git_cmd(["log", "-1", "--pretty=format:%H %s"])
+        details["last_commit_rc"] = rc
+        details["last_commit_out"] = out if out else None
+        details["last_commit_err"] = err if err else None
+
+        # tail the snapshot dir heartbeat and snapshot files if present
+        try:
+            hb_file = SNAPSHOT_DIR / "heartbeats.log"
+            if hb_file.exists():
+                with hb_file.open("r", encoding="utf-8") as f:
+                    lines = f.readlines()[-10:]
+                details["heartbeats_tail"] = [l.strip() for l in lines]
+            else:
+                details["heartbeats_tail"] = None
+        except Exception as e:
+            details["heartbeats_tail_error"] = str(e)
+
+        return jsonify({"ok": True, "details": details}), 200
+    except Exception as e:
+        logger.exception("manual git push endpoint failed: %s", e)
+        details["exception"] = str(e)
+        return jsonify({"ok": False, "details": details}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
