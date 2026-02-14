@@ -906,6 +906,43 @@ def api_admin_promote():
 
     return jsonify({"ok": True, "new_admin_key": new_key})
 
+# --------- pulse receiver (accept pings from breathe / other pingers) ----------
+@app.route("/pulse_receiver", methods=["POST", "GET"])
+def pulse_receiver():
+    """
+    Lightweight endpoint that accepts pulses from an external pinger (e.g. breathe).
+    - If FORWARD_TOKEN or PULSE_TOKEN env var is set, require X-PULSE-TOKEN header to match.
+    - Append a short line to data_snapshot/heartbeats.log for inspection and snapshotting.
+    - Always return 200 OK (unless token check fails) so external pingers see success.
+    """
+    # token protection (optional)
+    expected_token = os.environ.get("FORWARD_TOKEN") or os.environ.get("PULSE_TOKEN")
+    if expected_token:
+        incoming = request.headers.get("X-PULSE-TOKEN")
+        if incoming != expected_token:
+            logger.info("pulse_receiver: forbidden (bad token) from %s", request.remote_addr)
+            return jsonify({"status": "forbidden"}), 403
+
+    # read payload (JSON preferred, otherwise form data or fallback ping)
+    payload = request.get_json(silent=True)
+    if payload is None:
+        try:
+            payload = request.form.to_dict() or {"message": "pulse"}
+        except Exception:
+            payload = {"message": "pulse"}
+
+    # write a tiny heartbeat log (best-effort)
+    try:
+        hb_file = SNAPSHOT_DIR / "heartbeats.log"
+        hb_line = f"{datetime.utcnow().isoformat()} {request.remote_addr} {json.dumps(payload, default=str)}\n"
+        with hb_file.open("a", encoding="utf-8") as f:
+            f.write(hb_line)
+    except Exception as e:
+        logger.info("pulse_receiver: could not write heartbeat log: %s", e)
+
+    # reply 200 so pingers know we're alive
+    return jsonify({"status": "ok", "received": True}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
+
