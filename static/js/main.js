@@ -695,8 +695,131 @@ window.addEventListener('load', async ()=>{
   // start indicator refresher
   startIndicatorRefresh();
 });
+// --- Download all / pre-cache videos (main thread) ---
+
+async function estimateStorageNeeded(totalBytesApprox) {
+  if (!navigator.storage || !navigator.storage.estimate) return null;
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    return { usage, quota, free: quota - (usage || 0), needed: totalBytesApprox };
+  } catch (e) {
+    return null;
+  }
+}
+
+// create a simple progress overlay (very small)
+function createCacheProgressOverlay(){
+  let el = document.getElementById('te_cache_overlay');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'te_cache_overlay';
+  el.style = 'position:fixed;inset:12px;background:rgba(0,0,0,.75);z-index:10010;padding:16px;border-radius:12px;color:#fff;display:flex;flex-direction:column;gap:8px;max-width:420px;right:12px;top:12px;';
+  el.innerHTML = `<div id="te_cache_msg">Preparing to cache videos…</div>
+    <progress id="te_cache_progress" value="0" max="100" style="width:100%"></progress>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="te_cache_cancel" class="te-btn te-skip">Cancel</button>
+    </div>`;
+  document.body.appendChild(el);
+  document.getElementById('te_cache_cancel').addEventListener('click', () => {
+    // simple cancel: reload page to stop workers or just hide UI
+    el._cancel = true;
+    el.remove();
+  });
+  return el;
+}
+
+// Call this to start caching (wired to a "Download all" button)
+async function downloadAllVideos() {
+  // gather list of video & thumbnail urls (unique)
+  const urls = [];
+  allRoutines.forEach(r => {
+    if (r.video_url) urls.push(r.video_url);
+    if (r.thumbnail_url) urls.push(r.thumbnail_url);
+  });
+  const uniq = Array.from(new Set(urls)).filter(Boolean);
+
+  if (!uniq.length) return alert('No videos found to download.');
+
+  // Estimate (rough): use duration * avg bitrate if you want — here we ask user to confirm
+  const est = await estimateStorageNeeded(); // null if not supported
+  // quick user confirmation for large lists
+  if (uniq.length > 20) {
+    const ok = confirm(`You're about to download ${uniq.length} media items for offline use. This may use a lot of device storage and bandwidth. Continue?`);
+    if (!ok) return;
+  }
+
+  // ensure service worker is ready and has a controller
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+    alert('Service worker not active — reload the page or try again after a moment.');
+    return;
+  }
+
+  // show progress UI
+  const overlay = createCacheProgressOverlay();
+  const msg = document.getElementById('te_cache_msg');
+  const progress = document.getElementById('te_cache_progress');
+  overlay._cancel = false;
+
+  // message handler for progress events from SW
+  function onSWMessage(ev) {
+    const data = ev.data || {};
+    if (!data || !data.type) return;
+    if (overlay._cancel) {
+      navigator.serviceWorker.controller.postMessage({ cmd: 'cancel-cache' });
+      cleanup();
+      return;
+    }
+    if (data.type === 'cache-start') {
+      msg.textContent = `Caching ${data.total} items…`;
+      progress.max = data.total;
+      progress.value = 0;
+    } else if (data.type === 'cache-progress') {
+      msg.textContent = `Caching ${data.index}/${data.total}: ${data.url}`;
+      progress.value = data.index;
+    } else if (data.type === 'cache-error') {
+      console.warn('cache error', data);
+      // optionally show small notice
+    } else if (data.type === 'cache-complete') {
+      msg.textContent = `Caching complete (${data.total}).`;
+      progress.value = progress.max;
+      setTimeout(() => cleanup(), 1000);
+    }
+  }
+
+  function cleanup() {
+    navigator.serviceWorker.removeEventListener('message', onSWMessage);
+    const el = document.getElementById('te_cache_overlay');
+    if (el) el.remove();
+  }
+
+  navigator.serviceWorker.addEventListener('message', onSWMessage);
+
+  // send the list to the service worker
+  navigator.serviceWorker.controller.postMessage({ cmd: 'cacheVideos', urls: uniq });
+}
+
+// add small "Download" button to the hub header (if not already present)
+(function addDownloadAllButton() {
+  try {
+    const headerActions = document.querySelector('.hub-actions');
+    if (!headerActions) return;
+    if (document.getElementById('downloadAllBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'downloadAllBtn';
+    btn.className = 'btn ghost';
+    btn.innerText = 'Download all';
+    btn.title = 'Download all videos & thumbnails for offline use';
+    btn.addEventListener('click', downloadAllVideos);
+    headerActions.insertBefore(btn, headerActions.firstChild);
+  } catch(e){ console.warn(e); }
+})();
+
+// expose the API
+window.TE = window.TE || {};
+window.TE.downloadAllVideos = downloadAllVideos;
 
 // expose playlist API for manual triggers
 window.TE = window.TE || {};
 window.TE.playCategoryPlaylist = playCategoryPlaylist;
 window.TE.stopSession = stopAndClose;
+
