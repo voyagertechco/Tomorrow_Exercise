@@ -5,485 +5,343 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Tomorrow Exercise — Welcome</title>
 
-  <!-- PWA / theming -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0b6efd" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 
-  <!-- External stylesheet left as-is so you can keep global styles there -->
   <link rel="stylesheet" href="/static/css/styles.css">
 
-  <!-- Inline styles: mobile-first, very large accessibility scale, explicit and verbose -->
   <style>
-  /* ===========================================================================
-     Tomorrow Exercise — Inline theme & mobile-first layout
-     This file intentionally includes many comments and explicit declarations to
-     make it verbose (so you can verify line counts and review every setting).
-     =========================================================================== */
+  /* MOBILE-FIRST APP-LIKE STYLING (responsive + clamped sizes) */
 
   :root{
-    /* --- color tokens --- */
-    --accent: #ff5a2f;
-    --accent-soft: #ff8a4d;
-    --accent-glow: rgba(255,90,47,.35);
+    --accent:#ff5a2f;
+    --accent-soft:#ff8a4d;
+    --bg-main:#0e1116;
+    --bg-panel:#151a21;
+    --bg-card:#1b212a;
+    --border:#262e39;
+    --muted:#9aa4b2;
+    --text:#e6edf5;
 
-    --bg-main: #0e1116;
-    --bg-panel: #151a21;
-    --bg-card: #1b212a;
-    --border: #262e39;
-    --muted: #9aa4b2;
-    --text: #e6edf5;
+    /* responsive typographic scale using clamp() */
+    --brand-size: clamp(22px, 6.8vw, 40px);
+    --title-size: clamp(18px, 5.2vw, 28px);
+    --body-size: clamp(14px, 4vw, 18px);
+    --pill-size: clamp(15px, 4.4vw, 20px);
 
-    /* --- accessibility scale ---
-       You specifically asked for ~5x bigger UI. Set scale to 5.0.
-       This multiplies many font and padding calculations below.
-    */
-    --scale: 5.0;
-    --base-font: 16px;
+    --gap: 12px;
+    --card-pad: 14px;
   }
 
-  /* ===========================================================================
-     Base / Reset
-     - mobile-first layout
-     - high font-size to meet accessibility requirement
-  =========================================================================== */
-  html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
+  html,body{
+    height:100%;
+    margin:0;
+    padding:0;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: radial-gradient(circle at 50% -20%, #1a1f27 0%, var(--bg-main) 55%);
-    color: var(--text);
-    -webkit-font-smoothing: antialiased;
-    font-size: calc(var(--base-font) * 1);
-    -webkit-text-size-adjust: 100%;
-    box-sizing: border-box;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
   }
 
-  /* Utility: inherit box-sizing */
-  *, *::before, *::after { box-sizing: inherit; }
-
-  /* ===========================================================================
-     Layout container
-     - center on desktop, top-aligned on mobile
-  =========================================================================== */
-  main.center-wrap {
-    min-height: 100vh;
-    display: flex;
-    align-items: flex-start; /* keep top aligned so very large UI doesn't center awkwardly */
-    justify-content: center;
-    padding: calc(18px * 1) ;
-    box-sizing: border-box;
+  main.center-wrap{
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:18px 12px;
+    box-sizing:border-box;
   }
 
-  /* ===========================================================================
-     Card component (used for auth + hub)
-  =========================================================================== */
-  .card {
-    background: linear-gradient(180deg, var(--bg-panel), var(--bg-card));
-    border-radius: 16px;
-    box-shadow: 0 18px 45px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03);
-    border: 1px solid var(--border);
-    padding: calc(18px * var(--scale));
-    width: 100%;
-    max-width: 920px;
-    box-sizing: border-box;
+  .card{
+    background:linear-gradient(180deg,var(--bg-panel),var(--bg-card));
+    border-radius:12px;
+    box-shadow: 0 14px 36px rgba(0,0,0,.55);
+    border:1px solid var(--border);
+    padding:var(--card-pad);
+    width:100%;
+    max-width:980px;
+    box-sizing:border-box;
   }
 
-  /* ===========================================================================
-     Branding — extremely large per request
-  =========================================================================== */
+  /* Header: app-like row with brand left and small actions right */
+  .hub-header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:8px;
+    flex-wrap:wrap;
+  }
+
   .brand {
-    font-weight: 900;
-    margin: 0;
-    font-size: calc(20px * var(--scale));
-    letter-spacing: 0.6px;
-    line-height: 1.05;
+    font-weight:900;
+    font-size:var(--brand-size);
+    margin:0;
+    line-height:1;
   }
 
-  .brand .accent {
-    color: var(--accent);
-    text-shadow: 0 0 14px var(--accent-glow);
+  .brand .accent { color:var(--accent); text-shadow:0 0 8px rgba(255,90,47,0.18); }
+
+  /* header right area holds settings and small controls */
+  .header-right {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
   }
 
-  .tag {
-    color: var(--muted);
-    font-size: calc(13px * var(--scale));
-    margin: calc(8px * 1) 0 calc(14px * 1);
+  .welcome {
+    font-weight:800;
+    font-size:var(--title-size);
+    margin:0;
   }
 
-  /* ===========================================================================
-     Auth card specifics
-     Keep fields large and touch-friendly
-  =========================================================================== */
-  .auth-card { max-width: 720px; margin: 12px auto; text-align: center; }
+  .subtext { font-size:var(--body-size); color:var(--muted); margin:2px 0 0; }
 
-  .auth-form input,
-  .auth-form textarea,
-  .auth-form select {
-    width: 100%;
-    padding: calc(12px * var(--scale));
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    margin-bottom: calc(10px * 1);
-    font-size: calc(16px * var(--scale));
-    background: #0f1318;
-    color: var(--text);
-    transition: .18s ease;
+  /* player settings row: compact and aligned */
+  .player-settings {
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin-top:8px;
+    flex-wrap:wrap;
   }
 
-  .auth-form input::placeholder { color: #6f7a88; }
-
-  .row { display: flex; gap: 12px; }
-  .row input { flex: 1; }
-
-  /* ===========================================================================
-     Buttons — huge and touch-optimized
-  =========================================================================== */
-  .actions { display: flex; gap: 12px; flex-direction: column; align-items: stretch; }
-  .btn {
-    padding: calc(12px * var(--scale)) calc(18px * var(--scale));
-    border-radius: 14px;
-    border: 0;
-    font-weight: 900;
-    cursor: pointer;
-    letter-spacing: .3px;
-    transition: .12s ease;
-    font-size: calc(18px * var(--scale));
-  }
-  .btn.primary {
-    background: linear-gradient(90deg, var(--accent), var(--accent-soft));
-    color: #120a06;
-    box-shadow: 0 8px 28px var(--accent-glow);
-  }
-  .btn.ghost {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--accent);
+  .player-settings label { font-weight:800; font-size:var(--body-size); margin-right:4px; color:var(--muted); }
+  .player-settings select {
+    padding:10px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:#0f1318;
+    color:var(--text);
+    font-size:var(--body-size);
   }
 
-  .tiny-note { font-size: calc(12px * var(--scale)); color: var(--muted); margin-top: 8px; }
-
-  /* ===========================================================================
-     HUB / Categories — arranged exactly as requested
-     Row 1: All | Strength
-     Row 2: Cardio | Flexibility
-     Row 3: Elderly | Special
-     Row 4: Start All (full width)
-  =========================================================================== */
-  .hub { display: flex; flex-direction: column; gap: calc(12px * 1); }
-  .hub-header { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
-
-  .player-settings { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .player-settings label { font-weight: 900; font-size: calc(14px * var(--scale)); }
-  .player-settings select { padding: calc(6px * var(--scale)); border-radius: 10px; border: 1px solid var(--border); background: #0f1318; color: var(--text); font-size: calc(14px * var(--scale)); }
-
+  /* Categories grid: 2 columns, 3 rows (for six items) on small screens */
   .category-grid {
-    display: grid;
+    display:grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: calc(10px * 1);
-    width: 100%;
-    margin: calc(6px * 1) 0;
+    gap:10px;
+    margin-top:14px;
+    align-items:stretch;
   }
 
   .cat-pill {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: calc(12px * var(--scale));
-    border-radius: 12px;
-    background: #0f1318;
-    border: 1px solid var(--border);
-    text-align: center;
-    font-weight: 900;
-    cursor: pointer;
-    color: var(--muted);
-    transition: .18s ease;
-    min-height: calc(56px * 1);
-    font-size: calc(18px * var(--scale));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:14px;
+    border-radius:12px;
+    background:#0f1318;
+    border:1px solid var(--border);
+    font-weight:900;
+    cursor:pointer;
+    color:var(--muted);
+    font-size:var(--pill-size);
+    text-align:center;
+    min-height:68px;
   }
 
   .cat-pill.active {
-    background: linear-gradient(90deg, var(--accent), var(--accent-soft));
-    color: #120a06;
-    border: 0;
-    box-shadow: 0 10px 30px var(--accent-glow);
+    background:linear-gradient(90deg,var(--accent),var(--accent-soft));
+    color:#120a06;
+    border:0;
+    box-shadow:0 10px 28px rgba(255,90,47,0.12);
   }
 
+  /* Start all shortcut: full width below the 3 rows */
   .cat-all-shortcut {
     grid-column: 1 / -1;
     background: linear-gradient(90deg,#23b14d,#1fb774);
-    color: #050505;
-    font-weight: 900;
-    padding: calc(12px * var(--scale));
-    border-radius: 12px;
-    font-size: calc(20px * var(--scale));
-    text-align: center;
+    color:#050505;
+    font-weight:900;
+    padding:14px;
+    border-radius:12px;
+    text-align:center;
+    font-size:var(--pill-size);
   }
 
-  /* ===========================================================================
-     Routines grid & cards
-  =========================================================================== */
+  /* Routines grid (cards) */
   .routine-grid {
-    display: grid;
+    display:grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: calc(12px * 1);
+    gap:12px;
+    margin-top:14px;
   }
 
   .routine-card {
-    background: linear-gradient(180deg,#11161c,#0f1318);
-    border-radius: 14px;
-    padding: calc(12px * 1);
-    box-shadow: 0 8px 22px rgba(0,0,0,.55);
-    display: flex;
-    flex-direction: column;
-    gap: calc(12px * 1);
-    text-decoration: none;
-    color: inherit;
-    border: 1px solid var(--border);
-    transition: .18s ease;
+    background:linear-gradient(180deg,#11161c,#0f1318);
+    border-radius:12px;
+    padding:10px;
+    box-shadow: 0 8px 18px rgba(0,0,0,.45);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    color:inherit;
+    border:1px solid var(--border);
   }
-
-  .routine-title { font-weight: 900; font-size: calc(18px * var(--scale)); margin: 0; }
-  .routine-meta { font-size: calc(12px * var(--scale)); color: var(--muted); }
 
   .routine-thumb {
-    height: calc(180px * 1);
-    border-radius: 12px;
-    background: #0b0e12;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 1px solid #222933;
-    position: relative;
+    width:100%;
+    height: 120px;                /* fixed reasonable height */
+    max-height: 26vh;            /* responsive cap so it never overflows */
+    border-radius:8px;
+    overflow:hidden;
+    background:#000;
   }
+  .routine-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 
-  .te-indicator {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.35);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    border: 2px solid rgba(0,0,0,0.4);
-    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
-  }
+  .routine-title { font-weight:900; font-size:var(--body-size); margin:0; }
+  .routine-meta { font-size:calc(var(--body-size) - 1px); color:var(--muted); }
 
-  .te-indicator.saved { background: #23b14d; box-shadow: 0 6px 18px rgba(35,177,77,0.18); }
-  .te-indicator.playing { box-shadow: 0 10px 28px rgba(35,177,77,0.28); transform: scale(1.4); }
+  /* small indicator */
+  .te-indicator { position:absolute; top:8px; right:8px; width:12px; height:12px; border-radius:50%; background: rgba(0,0,0,0.35); border:2px solid rgba(0,0,0,0.4); }
+  .te-indicator.saved { background:#23b14d; box-shadow:0 6px 12px rgba(35,177,77,0.16); }
+  .te-indicator.playing { box-shadow:0 8px 22px rgba(35,177,77,0.2); transform:scale(1.3); }
 
-  /* ===========================================================================
-     Player modal: large overlay + custom controls (no native fullscreen / download)
-  =========================================================================== */
-  .te-modal {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.9);
-    z-index: 9999;
-    padding: 12px;
-  }
+  /* Player modal kept similar but sized to not overflow */
+  .te-modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.9); z-index:9999; padding:12px; }
+  .te-player { width:100%; max-width:900px; background:#0f1318; border-radius:12px; padding:12px; box-sizing:border-box; }
+  .te-player video { width:100%; height:auto; border-radius:8px; background:#000; display:block; }
+  .te-overlay-count { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:48px; font-weight:900; color:#000; background:rgba(255,255,255,0.95); padding:14px 20px; border-radius:10px; display:none; z-index:10001; text-align:center; }
 
-  .te-player {
-    width: 100%;
-    max-width: 1100px;
-    background: #0f1318;
-    border-radius: 12px;
-    padding: calc(12px * 1);
-    box-sizing: border-box;
-    box-shadow: 0 30px 80px rgba(0,0,0,.7);
-  }
+  /* Make the app scroll smoothly on iOS */
+  body, html { -webkit-overflow-scrolling: touch; }
 
-  .te-player video {
-    width: 100%;
-    height: auto;
-    border-radius: 8px;
-    background: #000;
-    display: block;
-  }
-
-  .te-overlay-count {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%,-50%);
-    font-size: calc(80px * var(--scale));
-    font-weight: 900;
-    color: #000;
-    background: rgba(255,255,255,0.95);
-    padding: calc(18px * 1) calc(30px * 1);
-    border-radius: 12px;
-    box-shadow: 0 6px 24px rgba(0,0,0,.6);
-    display: none;
-    z-index: 10001;
-    text-align: center;
-  }
-
-  .te-break {
-    margin-top: 12px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: space-between;
-    color: #e6edf5;
-    font-weight: 900;
-  }
-
-  .te-break .count { font-size: calc(28px * var(--scale)); font-weight: 900; color: var(--accent); }
-
-  .te-controls { display: flex; gap: 12px; align-items: center; }
-  .te-btn { padding: calc(10px * var(--scale)) calc(12px * var(--scale)); border-radius: 12px; border: 0; cursor: pointer; font-weight: 900; font-size: calc(16px * var(--scale)); }
-  .te-skip { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.08); }
-  .te-stop { background: linear-gradient(90deg,#ff5a2f,#ff8a4d); color: #120a06; }
-  .te-playpause { background: linear-gradient(90deg,#0b6efd,#1466ff); color: #fff; }
-
-  /* rotate fallback class used when screen.orientation.lock not available */
-  .rotate-landscape { transform-origin: center center; transform: rotate(90deg) scale(1.4); }
-
-  /* ===========================================================================
-     Responsive pieces: keep grid expanding on wide screens
-  =========================================================================== */
-  @media (min-width: 720px) {
+  /* Responsive tweaks for tablets/desktop */
+  @media(min-width:720px){
     .routine-grid { grid-template-columns: repeat(3, 1fr); }
     .category-grid { grid-template-columns: repeat(3, 1fr); }
+    .routine-thumb { height: 160px; max-height: 30vh; }
   }
 
-  @media (min-width: 1100px) {
-    .routine-grid { grid-template-columns: repeat(4, 1fr); }
-    .auth-card { max-width: 720px; }
+  /* Small adjustments so brand/welcome isn't huge on tiny devices */
+  @media(max-width:340px){
+    .brand { font-size: clamp(18px, 7vw, 26px); }
+    .cat-pill { font-size: clamp(13px, 3.8vw, 16px); min-height:56px; }
   }
-
-  /* ========================================================================
-     Additional developer notes:
-     - This index is intentionally verbose (more comments, clearer declarations).
-     - The actual runtime behavior of the player, offline saving, and SW is in
-       static/js/main.js and static/js/idb.js / static/js/sw.js. Keep those files.
-     ======================================================================== */
   </style>
-
 </head>
 <body>
-  <!-- ===========================================================================
-       App root: includes AUTH then HUB (hub hidden until registration completes)
-       =========================================================================== -->
   <main class="center-wrap" id="appRoot">
-
-    <!-- =========================
-         AUTH SECTION (VISIBLE by default until registered)
-         - username, age, country, occupation
-         - large inputs for accessibility
-         ========================= -->
     <section id="authSection" class="card auth-card" aria-labelledby="brandTitle">
-      <h1 id="brandTitle" class="brand">Tomorrow <span class="accent">Exercise</span></h1>
-      <p class="tag">Move. Breathe. Become tomorrow’s best you.</p>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h1 id="brandTitle" class="brand">Tomorrow <span class="accent">Exercise</span></h1>
+          <p class="subtext">Move. Breathe. Become tomorrow’s best you.</p>
+        </div>
 
-      <form id="authForm" class="auth-form" autocomplete="off" novalidate>
-        <!-- Large input fields for mobile-first and visibility -->
+        <!-- header-right: welcome + quick settings (if user already exists this will show) -->
+        <div class="header-right" style="margin-left:auto;">
+          <div id="headerUserWrap" style="display:none; flex-direction:column; align-items:flex-end;">
+            <div id="welcomeText" class="welcome">Welcome</div>
+            <div class="subtext" id="subText">Choose a routine to begin.</div>
+          </div>
+        </div>
+      </div>
+
+      <form id="authForm" class="auth-form" autocomplete="off" style="margin-top:12px;">
         <input id="username" name="username" placeholder="Username" required aria-label="Username" />
-        <div class="row" style="margin-top: calc(6px * 1);">
+        <div class="row" style="display:flex;gap:8px;margin-top:8px">
           <input id="age" name="age" type="number" placeholder="Age" min="8" max="120" required aria-label="Age" />
           <input id="country" name="country" placeholder="Country" required aria-label="Country" />
         </div>
-
-        <input id="occupation" name="occupation" placeholder="Occupation (optional)" aria-label="Occupation" />
-
-        <div class="actions" style="margin-top: calc(10px * 1);">
-          <button id="startBtn" class="btn primary" type="submit">Get started</button>
-          <!-- Guest option kept in DOM to avoid JS errors but disabled by default -->
-          <button id="guestBtn" class="btn ghost" type="button" disabled title="Guest mode disabled — please register">Try as Guest</button>
+        <input id="occupation" name="occupation" placeholder="Occupation (optional)" style="margin-top:8px" />
+        <div class="actions" style="margin-top:12px;">
+          <button id="startBtn" class="btn primary" type="submit" style="width:100%;">Get started</button>
+          <button id="guestBtn" class="btn ghost" type="button" disabled style="width:100%; margin-top:8px;">Try as Guest</button>
         </div>
+        <p class="tiny-note" style="margin-top:8px;">By continuing you accept the offline-first experience. Registration is required to access routines.</p>
       </form>
-
-      <p class="tiny-note">By continuing you accept the offline-first experience. Registration is required to access routines.</p>
     </section>
 
-    <!-- =========================
-         HUB SECTION (HIDDEN until registration completes)
-         - categories (arranged as requested)
-         - routine grid
-         - player quick settings (duration & break)
-         ========================= -->
-    <section id="hubSection" class="card hub" hidden>
-      <header class="hub-header">
-        <div>
-          <h2 id="welcomeText" style="font-size: calc(18px * var(--scale)); margin: 0;">Welcome</h2>
-          <p id="subText" style="font-size: calc(14px * var(--scale)); margin: 6px 0 0;">Choose a routine to begin — offline-ready once saved.</p>
+    <!-- HUB: hidden until registration completes -->
+    <section id="hubSection" class="card hub" hidden style="margin-top:14px;">
+      <div class="hub-header">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div id="welcomeTextHeader" style="font-weight:900; font-size:var(--title-size);">Welcome</div>
+            <div id="subTextHeader" class="subtext">Choose a routine to begin — offline-ready once saved.</div>
+          </div>
+
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div class="player-settings" aria-hidden="false">
+              <label for="playLengthSelect">Duration</label>
+              <select id="playLengthSelect" aria-label="Play length">
+                <option value="20">20s</option>
+                <option value="60">1m</option>
+                <option value="120">2m</option>
+              </select>
+              <label for="breakLengthSelect">Break</label>
+              <select id="breakLengthSelect" aria-label="Break length">
+                <option value="10">10s</option>
+                <option value="20">20s</option>
+                <option value="30">30s</option>
+              </select>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button id="installBtn" class="btn ghost" style="display:none; padding:8px 10px; font-size:var(--body-size);">Install</button>
+            </div>
+          </div>
         </div>
 
-        <!-- Player quick settings -->
-        <div class="player-settings" style="margin-top: calc(10px * 1);">
-          <label for="playLengthSelect">Duration:</label>
-          <select id="playLengthSelect" aria-label="Play length">
-            <option value="20">20s (default)</option>
-            <option value="60">1m</option>
-            <option value="120">2m</option>
-          </select>
+        <!-- categories grid -->
+        <div id="categoryRow" class="category-grid" role="navigation" aria-label="Categories" style="margin-top:14px;"></div>
+      </div>
 
-          <label for="breakLengthSelect">Break:</label>
-          <select id="breakLengthSelect" aria-label="Break length">
-            <option value="10">10s (default)</option>
-            <option value="20">20s</option>
-            <option value="30">30s</option>
-          </select>
-        </div>
-      </header>
-
-      <!-- Categories grid (script will populate these buttons) -->
-      <div id="categoryRow" class="category-grid" role="navigation" aria-label="Categories"></div>
-
-      <!-- Routines grid (script will render routine cards here) -->
-      <div id="routineGrid" class="routine-grid" role="list"></div>
+      <!-- routines area -->
+      <div class="routine-grid" id="routineGrid" role="list" style="margin-top:12px;"></div>
     </section>
-
   </main>
 
-  <!-- Install banner (hidden by default; shown by main.js on beforeinstallprompt or fallback) -->
-  <div id="installBanner" class="install-banner" style="display:none;">
-    <div class="msg" style="font-weight:900; font-size: calc(16px * var(--scale));">Install Tomorrow Exercise for an app-like experience.</div>
-    <div class="actions" style="display:flex; gap:12px;">
-      <button id="bannerInstall" class="btn primary">Install</button>
-      <button id="bannerDismiss" class="btn ghost">Maybe later</button>
+  <!-- install banner -->
+  <div id="installBanner" style="display:none; position:fixed; left:12px; right:12px; bottom:18px; z-index:999;">
+    <div class="card" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px;">
+      <div class="msg" style="font-weight:900;">Install Tomorrow Exercise for an app-like experience.</div>
+      <div style="display:flex; gap:8px;">
+        <button id="bannerInstall" class="btn primary">Install</button>
+        <button id="bannerDismiss" class="btn ghost">Maybe later</button>
+      </div>
     </div>
   </div>
 
-  <!-- Small guard: ensure hub hidden unless a user exists in localStorage -->
   <script>
-    (function(){
-      try {
-        const u = localStorage.getItem('te_user');
-        if (!u) {
-          document.getElementById('authSection').hidden = false;
-          document.getElementById('hubSection').hidden = true;
-        } else {
-          try {
-            const j = JSON.parse(u);
-            if (!(j && j.registered)) {
-              document.getElementById('authSection').hidden = false;
-              document.getElementById('hubSection').hidden = true;
-            }
-          } catch(e) {
+  // small guard: show auth if no user
+  (function(){
+    try {
+      const u = localStorage.getItem('te_user');
+      if(!u) {
+        document.getElementById('authSection').hidden = false;
+        document.getElementById('hubSection').hidden = true;
+      } else {
+        try {
+          const j = JSON.parse(u);
+          if(j && j.username) {
+            // if user exists, show hub header user
+            const headerWrap = document.getElementById('headerUserWrap');
+            if(headerWrap) { headerWrap.style.display = 'flex'; document.getElementById('welcomeText').textContent = `Welcome, ${j.username}`; }
+            document.getElementById('authSection').hidden = true;
+            document.getElementById('hubSection').hidden = false;
+          } else {
             document.getElementById('authSection').hidden = false;
             document.getElementById('hubSection').hidden = true;
           }
+        } catch(e){
+          document.getElementById('authSection').hidden = false;
+          document.getElementById('hubSection').hidden = true;
         }
-      } catch(e) {
-        try { document.getElementById('authSection').hidden = false; document.getElementById('hubSection').hidden = true; } catch(e){}
       }
-    })();
+    } catch(e){
+      document.getElementById('authSection').hidden = false;
+      document.getElementById('hubSection').hidden = true;
+    }
+  })();
   </script>
 
-  <!-- Keep your idb and main logic separate -->
   <script src="/static/js/idb.js"></script>
   <script src="/static/js/main.js"></script>
-
-  <!-- Small note for maintainers: the main runtime behavior (playlist logic, play/break timers,
-       saving to IndexedDB, service worker registration) lives in static/js/main.js.
-       If you want the very verbose main.js as well, tell me and I'll paste it expanded. -->
 </body>
 </html>
