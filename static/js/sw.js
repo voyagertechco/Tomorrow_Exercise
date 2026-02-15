@@ -86,3 +86,40 @@ self.addEventListener('fetch', evt => {
 
   // Default: network
 });
+// add this to the bottom of your sw.js
+
+// helper to send a message to all clients (pages controlled by SW)
+async function broadcastMessage(msg) {
+  const all = await self.clients.matchAll({includeUncontrolled: true});
+  for (const c of all) {
+    try { c.postMessage(msg); } catch (e) { /* ignore */ }
+  }
+}
+
+self.addEventListener('message', (e) => {
+  const data = e.data || {};
+  if (!data || !data.cmd) return;
+
+  if (data.cmd === 'cacheVideos' && Array.isArray(data.urls)) {
+    (async () => {
+      const urls = data.urls.slice(); // copy
+      const cache = await caches.open('tomorrow-runtime-v1');
+      broadcastMessage({ type: 'cache-start', total: urls.length });
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        try {
+          const resp = await fetch(url, {mode:'cors', credentials: 'same-origin'});
+          if (resp && resp.ok) {
+            await cache.put(url, resp.clone());
+            broadcastMessage({ type: 'cache-progress', index: i + 1, total: urls.length, url });
+          } else {
+            broadcastMessage({ type: 'cache-error', index: i + 1, url, status: resp ? resp.status : 'no-response' });
+          }
+        } catch (err) {
+          broadcastMessage({ type: 'cache-error', index: i + 1, url, error: String(err) });
+        }
+      }
+      broadcastMessage({ type: 'cache-complete', total: urls.length });
+    })();
+  }
+});
