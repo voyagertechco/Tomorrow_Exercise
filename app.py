@@ -1,15 +1,5 @@
-# app_with_github_sync.py
-# Modified from user's original app.py to snapshot DB data and (optionally) uploaded media
-# to a git repository inside the project directory. This file attempts to commit JSON
-# snapshots after key operations (user register, admin uploads, metric updates, etc.)
-#
-# Added endpoint:
-#   POST /api/admin/git_push
-#   - requires admin auth (same as other admin endpoints)
-#   - body params:
-#       - include_media: "1"/"true"/"yes" to include media in commit (optional)
-#       - message: commit message override (optional)
-#   - returns JSON with success boolean and gathered git command outputs
+# app.py — patched: detached-HEAD handling, redaction, masked git logging, push lock
+# Based on user's version; includes /api/admin/git_push endpoint and safer git behavior.
 
 from pathlib import Path
 import sqlite3
@@ -25,6 +15,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import logging
 import time
+import threading
 
 # --- basic logging ---
 logging.basicConfig(level=logging.INFO)
@@ -66,17 +57,30 @@ GIT_BRANCH = os.environ.get("GIT_BRANCH", "main")
 # ----- upload limits (adjust as needed) -----
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 
+# simple lock to serialize git operations and avoid races
+_git_lock = threading.Lock()
+
 
 # ---------- helper: Snapshot DB to JSON files that are safe to commit ----------
 def snapshot_data_to_json(conn):
     """
     Dump important tables to JSON files in data_snapshot/ and return list of file paths
-    This avoids committing large binaries (videos) unless explicitly enabled.
+    Redact sensitive fields (api_key, password_hash) before writing.
     """
     try:
         out_files = []
         cur = conn.execute("SELECT id,username,age,country,occupation,admin,api_key,visits,reminders_set,last_seen,created_at FROM users ORDER BY id")
-        users = [dict(zip([c[0] for c in cur.description], row)) for row in cur.fetchall()]
+        users_raw = [dict(zip([c[0] for c in cur.description], row)) for row in cur.fetchall()]
+        users = []
+        for u in users_raw:
+            safe = dict(u)
+            # redact sensitive fields
+            if safe.get("api_key"):
+                safe["api_key"] = "REDACTED"
+            if "password_hash" in safe:
+                safe.pop("password_hash", None)
+            users.append(safe)
+
         ufile = SNAPSHOT_DIR / "users.json"
         ufile.write_text(json.dumps(users, default=str, indent=2), encoding="utf-8")
         out_files.append(str(ufile.relative_to(BASE_DIR)))
@@ -111,9 +115,29 @@ def git_repo_present():
     return (BASE_DIR / ".git").exists()
 
 
+def mask_token_url(url):
+    """Naive masking of credentials in an http(s) URL for safe logging."""
+    try:
+        if not url or "@" not in url:
+            return url
+        scheme, rest = url.split("://", 1)
+        cred, host = rest.split("@", 1)
+        return f"{scheme}://<creds>@{host}"
+    except Exception:
+        return "<masked_url>"
+
+
 def run_git_cmd(args, timeout=GIT_TIMEOUT, env=None):
     try:
-        logger.info("git %s", " ".join(args))
+        # mask any URL-looking arg for logs
+        safe_args = []
+        for a in args:
+            if isinstance(a, str) and (a.startswith("http://") or a.startswith("https://")) and "@" in a:
+                safe_args.append(mask_token_url(a))
+            else:
+                safe_args.append(a)
+        logger.info("git %s", " ".join(safe_args))
+
         r = subprocess.run(["git"] + args, cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, env=env)
         out = r.stdout.decode("utf-8", errors="replace").strip()
         err = r.stderr.decode("utf-8", errors="replace").strip()
@@ -164,7 +188,7 @@ def ensure_remote_configured():
                 logger.warning("Failed to set remote url: %s", e2 or o2)
                 return False
     else:
-        # add remote
+        # add remote, careful with logging
         rc2, o2, e2 = run_git_cmd(["remote", "add", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
         if rc2 == 0:
             logger.info("Remote %s added", GITHUB_REMOTE_NAME)
@@ -172,6 +196,36 @@ def ensure_remote_configured():
         else:
             logger.warning("Failed to add remote: %s", e2 or o2)
             return False
+
+
+def ensure_branch_for_push(branch_name):
+    """
+    If we're on a detached HEAD, create or update a branch at HEAD so pushing works.
+    Returns tuple (ok: bool, info: str).
+
+    This function tries to create/force the branch and checkout it so future commits land on a named branch.
+    """
+    try:
+        rc, out, err = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"])
+        cur = (out or "").strip()
+        if rc != 0:
+            return False, f"rev-parse failed: {err or out}"
+
+        if cur == "HEAD" or not cur:
+            # create or reset branch to current HEAD (safe operation)
+            rc2, o2, e2 = run_git_cmd(["branch", "-f", branch_name, "HEAD"])  # force-create/point branch to HEAD
+            if rc2 != 0:
+                return False, f"could not create branch {branch_name}: {e2 or o2}"
+            # checkout the branch so subsequent commits are on-named-branch
+            rc3, o3, e3 = run_git_cmd(["checkout", branch_name])
+            if rc3 != 0:
+                # fallback: we didn't change working HEAD; still okay if we push HEAD:branch explicitly
+                return False, f"checkout failed: {e3 or o3}"
+            return True, f"created+checked-out branch {branch_name}"
+        else:
+            return True, f"on branch {cur}"
+    except Exception as e:
+        return False, str(e)
 
 
 def push_to_git(paths=None, message=None, include_media=False):
@@ -186,110 +240,122 @@ def push_to_git(paths=None, message=None, include_media=False):
         logger.info("GIT_SYNC disabled via env; skipping git push")
         return False
 
-    # Initialize git if missing and GITHUB_REPO_URL is set
-    if not git_repo_present():
-        logger.info(".git not present. Initializing git repository.")
-        rc, out, err = run_git_cmd(["init"])
-        if rc != 0:
-            logger.warning("git init failed: %s", err or out)
-            # continue; maybe subsequent operations will still work
-        # ensure remote if URL provided
+    with _git_lock:
+        # Initialize git if missing and GITHUB_REPO_URL is set
+        if not git_repo_present():
+            logger.info(".git not present. Initializing git repository.")
+            rc, out, err = run_git_cmd(["init"])  # may be detached initial commit depending on environment
+            if rc != 0:
+                logger.warning("git init failed: %s", err or out)
+            # ensure remote if URL provided
+            if GITHUB_REPO_URL:
+                rc2, o2, e2 = run_git_cmd(["remote", "add", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
+                if rc2 != 0:
+                    logger.warning("git remote add failed: %s", e2 or o2)
+
+        # If remote not configured, try to configure it
         if GITHUB_REPO_URL:
-            rc2, o2, e2 = run_git_cmd(["remote", "add", GITHUB_REMOTE_NAME, GITHUB_REPO_URL])
-            if rc2 != 0:
-                logger.warning("git remote add failed: %s", e2 or o2)
+            ensure_remote_configured()
 
-    # If remote not configured, try to configure it
-    if GITHUB_REPO_URL:
-        ensure_remote_configured()
-
-    if not git_repo_present():
-        logger.info("No .git repo found under %s — skipping git operations", BASE_DIR)
-        return False
-
-    # Create snapshot paths if not provided
-    if paths is None:
-        try:
-            conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
-            paths = snapshot_data_to_json(conn)
-            conn.close()
-        except Exception as e:
-            logger.exception("could not snapshot DB for git push: %s", e)
-            paths = []
-
-    # optionally add uploaded media files (only when explicitly enabled)
-    if include_media and GIT_COMMIT_MEDIA:
-        paths.append(str(Path("static") / "videos"))
-
-    # normalize paths and ensure there is something to add
-    paths = [str(Path(p)) for p in paths if p]
-    if not paths:
-        logger.info("no paths to commit")
-        return True
-
-    try:
-        # ensure local git identity exists
-        ensure_git_identity()
-
-        # run git add for each path
-        add_args = ["add", "--"] + paths
-        rc, out, err = run_git_cmd(add_args)
-        if rc != 0:
-            logger.warning("git add returned non-zero: %s", err or out)
-
-        # check for staged changes
-        rc, status_out, status_err = run_git_cmd(["status", "--porcelain"])
-        if rc != 0:
-            logger.warning("git status failed: %s", status_err or status_out)
-
-        if not status_out.strip():
-            logger.info("no changes to commit")
-            return True
-
-        # commit
-        commit_message = message or f"autosave: snapshot {datetime.utcnow().isoformat()}"
-        # also set GIT_AUTHOR_* env values for subprocess commit if provided
-        env = os.environ.copy()
-        if GIT_AUTHOR_NAME:
-            env["GIT_AUTHOR_NAME"] = GIT_AUTHOR_NAME
-            env["GIT_COMMITTER_NAME"] = GIT_AUTHOR_NAME
-        if GIT_AUTHOR_EMAIL:
-            env["GIT_AUTHOR_EMAIL"] = GIT_AUTHOR_EMAIL
-            env["GIT_COMMITTER_EMAIL"] = GIT_AUTHOR_EMAIL
-
-        logger.info("Committing with message: %s", commit_message)
-        p = subprocess.run(["git", "commit", "-m", commit_message], cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
-        pout = p.stdout.decode("utf-8", errors="replace").strip()
-        perr = p.stderr.decode("utf-8", errors="replace").strip()
-        if p.returncode != 0:
-            logger.warning("git commit failed (non-fatal): %s", perr or pout)
-            # continue anyway to attempt push
-
-        # If remote exists, push to the configured branch
-        rc_remote, remote_out, remote_err = run_git_cmd(["remote", "get-url", GITHUB_REMOTE_NAME])
-        if rc_remote != 0:
-            logger.warning("No configured remote '%s' - cannot push", GITHUB_REMOTE_NAME)
+        if not git_repo_present():
+            logger.info("No .git repo found under %s — skipping git operations", BASE_DIR)
             return False
 
-        # attempt push with upstream set (push -u origin <branch>)
-        push_args = ["push", GITHUB_REMOTE_NAME, f"{GIT_BRANCH}", "--set-upstream"]
-        rc_push, out_push, err_push = run_git_cmd(push_args, timeout=GIT_TIMEOUT * 2, env=env)
-        if rc_push != 0:
-            # fallback: try plain git push (maybe upstream already set)
-            rc2, out2, err2 = run_git_cmd(["push"], timeout=GIT_TIMEOUT * 2, env=env)
-            if rc2 != 0:
-                logger.warning("git push failed: %s", err2 or out2)
-                return False
-            else:
-                logger.info("git push OK (fallback): %s", out2)
-                return True
-        else:
-            logger.info("git push OK: %s", out_push)
+        # Create snapshot paths if not provided
+        if paths is None:
+            try:
+                conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+                paths = snapshot_data_to_json(conn)
+                conn.close()
+            except Exception as e:
+                logger.exception("could not snapshot DB for git push: %s", e)
+                paths = []
+
+        # optionally add uploaded media files (only when explicitly enabled)
+        if include_media and GIT_COMMIT_MEDIA:
+            paths.append(str(Path("static") / "videos"))
+
+        # normalize paths and ensure there is something to add
+        paths = [str(Path(p)) for p in paths if p]
+        if not paths:
+            logger.info("no paths to commit")
             return True
 
-    except Exception as e:
-        logger.exception("git push exception: %s", e)
-        return False
+        try:
+            # ensure local git identity exists
+            ensure_git_identity()
+
+            # attempt to ensure we're on a branch for pushing
+            ok_branch, branch_info = ensure_branch_for_push(GIT_BRANCH)
+            logger.info("ensure_branch_for_push: %s (%s)", ok_branch, branch_info)
+
+            # run git add for each path
+            add_args = ["add", "--"] + paths
+            rc, out, err = run_git_cmd(add_args)
+            if rc != 0:
+                logger.warning("git add returned non-zero: %s", err or out)
+
+            # check for staged changes
+            rc, status_out, status_err = run_git_cmd(["status", "--porcelain"]) 
+            if rc != 0:
+                logger.warning("git status failed: %s", status_err or status_out)
+
+            if not status_out.strip():
+                logger.info("no changes to commit")
+                return True
+
+            # commit
+            commit_message = message or f"autosave: snapshot {datetime.utcnow().isoformat()}"
+            # also set GIT_AUTHOR_* env values for subprocess commit if provided
+            env = os.environ.copy()
+            if GIT_AUTHOR_NAME:
+                env["GIT_AUTHOR_NAME"] = GIT_AUTHOR_NAME
+                env["GIT_COMMITTER_NAME"] = GIT_AUTHOR_NAME
+            if GIT_AUTHOR_EMAIL:
+                env["GIT_AUTHOR_EMAIL"] = GIT_AUTHOR_EMAIL
+                env["GIT_COMMITTER_EMAIL"] = GIT_AUTHOR_EMAIL
+
+            logger.info("Committing with message: %s", commit_message)
+            p = subprocess.run(["git", "commit", "-m", commit_message], cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=GIT_TIMEOUT)
+            pout = p.stdout.decode("utf-8", errors="replace").strip()
+            perr = p.stderr.decode("utf-8", errors="replace").strip()
+            if p.returncode != 0:
+                logger.warning("git commit failed (non-fatal): %s", perr or pout)
+                # continue anyway to attempt push
+
+            # If remote exists, push to the configured branch
+            rc_remote, remote_out, remote_err = run_git_cmd(["remote", "get-url", GITHUB_REMOTE_NAME])
+            if rc_remote != 0:
+                logger.warning("No configured remote '%s' - cannot push", GITHUB_REMOTE_NAME)
+                return False
+
+            # attempt push with upstream set (push -u origin <branch>), but if detached HEAD persists use HEAD:refs/heads/<branch>
+            push_args = ["push", GITHUB_REMOTE_NAME, f"{GIT_BRANCH}", "--set-upstream"]
+            rc_push, out_push, err_push = run_git_cmd(push_args, timeout=GIT_TIMEOUT * 2, env=env)
+            if rc_push != 0:
+                logger.warning("git push --set-upstream failed: %s", err_push or out_push)
+                # fallback: try pushing HEAD explicitly to remote branch (handles detached HEAD)
+                fallback_args = ["push", GITHUB_REMOTE_NAME, f"HEAD:refs/heads/{GIT_BRANCH}"]
+                rc_fb, out_fb, err_fb = run_git_cmd(fallback_args, timeout=GIT_TIMEOUT * 4, env=env)
+                if rc_fb != 0:
+                    # final fallback: plain git push
+                    rc2, out2, err2 = run_git_cmd(["push"], timeout=GIT_TIMEOUT * 2, env=env)
+                    if rc2 != 0:
+                        logger.warning("git push final fallback failed: %s", err2 or out2)
+                        return False
+                    else:
+                        logger.info("git push OK (final fallback): %s", out2)
+                        return True
+                else:
+                    logger.info("git push OK (fallback HEAD:branch): %s", out_fb)
+                    return True
+            else:
+                logger.info("git push OK: %s", out_push)
+                return True
+
+        except Exception as e:
+            logger.exception("git push exception: %s", e)
+            return False
 
 
 # ---------- DB initialization + safe migrations (unchanged) ----------
@@ -1079,7 +1145,7 @@ def api_admin_git_push():
         details["remote_get_url_out"] = out if out else None
         details["remote_get_url_err"] = err if err else None
 
-        rc, out, err = run_git_cmd(["log", "-1", "--pretty=format:%H %s"])
+        rc, out, err = run_git_cmd(["log", "-1", "--pretty=format:%H %s"]) 
         details["last_commit_rc"] = rc
         details["last_commit_out"] = out if out else None
         details["last_commit_err"] = err if err else None
