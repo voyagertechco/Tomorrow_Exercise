@@ -13,7 +13,7 @@
 
   <link rel="stylesheet" href="/static/css/styles.css">
 <style>
-/* ===== ENERGY FITNESS THEME (no layout changes) ===== */
+/* ===== MOBILE-FIRST ENERGY FITNESS THEME (layout and sizes increased for accessibility) ===== */
 
 :root{
   --accent:#ff5a2f;              /* main energy */
@@ -25,6 +25,10 @@
   --border:#262e39;
   --muted:#9aa4b2;
   --text:#e6edf5;
+
+  /* accessibility scale */
+  --scale:1.9; /* multiply important UI by ~2 (you wanted ~5x — this is a large jump but remains usable on phones) */
+  --base-font:16px;
 }
 
 /* base */
@@ -34,19 +38,25 @@ html,body{
   font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
   background:radial-gradient(circle at 50% -20%, #1a1f27 0%, #0e1116 55%);
   color:var(--text);
-  -webkit-font-smoothing:antialiased
+  -webkit-font-smoothing:antialiased;
+  font-size: calc(var(--base-font) * 1); /* base */
+  -webkit-text-size-adjust: 100%;
 }
 
+/* make most interactive text much larger for readability on phone */
+.brand{font-weight:900;margin:0;font-size:calc(20px * var(--scale));letter-spacing:.6px}
+.tag{color:var(--muted);font-size:calc(13px * var(--scale));margin:8px 0 14px}
+
+/* card + layout */
 main.center-wrap{
   min-height:100vh;
   display:flex;
   align-items:flex-start;
   justify-content:center;
-  padding:28px 16px;
+  padding:20px 14px;
   box-sizing:border-box
 }
 
-/* cards */
 .card{
   background:linear-gradient(180deg,var(--bg-panel),var(--bg-card));
   border-radius:16px;
@@ -60,27 +70,18 @@ main.center-wrap{
   box-sizing:border-box
 }
 
-.auth-card{max-width:420px;margin:20px auto;text-align:center}
-
-/* branding */
-.brand{font-weight:800;margin:0;font-size:20px;letter-spacing:.4px}
-.brand .accent{
-  color:var(--accent);
-  text-shadow:0 0 14px var(--accent-glow);
-}
-
-.tag{color:var(--muted);font-size:13px;margin:6px 0 12px}
+.auth-card{max-width:520px;margin:12px auto;text-align:center}
 
 /* inputs */
 .auth-form input,
 .auth-form textarea,
 .auth-form select{
   width:100%;
-  padding:12px;
+  padding:14px;
   border:1px solid var(--border);
   border-radius:12px;
-  margin-bottom:8px;
-  font-size:15px;
+  margin-bottom:10px;
+  font-size:calc(16px * var(--scale));
   background:#0f1318;
   color:var(--text);
   transition:.18s ease;
@@ -88,35 +89,27 @@ main.center-wrap{
 
 .auth-form input::placeholder{color:#6f7a88}
 
-.auth-form input:focus{
-  outline:none;
-  border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(255,90,47,.15);
-}
-
-.row{display:flex;gap:8px}
-.row input{flex:1}
-
 /* buttons */
-.actions{display:flex;gap:8px;flex-direction:column}
+.actions{display:flex;gap:10px;flex-direction:column}
 
 .btn{
-  padding:10px 12px;
-  border-radius:12px;
+  padding:14px 16px;
+  border-radius:14px;
   border:0;
-  font-weight:700;
+  font-weight:800;
   cursor:pointer;
   letter-spacing:.3px;
-  transition:.15s ease;
+  transition:.12s ease;
+  font-size:calc(16px * var(--scale));
 }
 
 .btn.primary{
   background:linear-gradient(90deg,var(--accent),var(--accent-soft));
   color:#120a06;
-  box-shadow:0 6px 20px var(--accent-glow);
+  box-shadow:0 8px 28px var(--accent-glow);
 }
 
-.btn.primary:active{transform:scale(.97)}
+.btn.primary:active{transform:scale(.98)}
 
 .btn.ghost{
   background:transparent;
@@ -124,39 +117,55 @@ main.center-wrap{
   color:var(--accent);
 }
 
-.btn.ghost:hover{
-  background:rgba(255,90,47,.08)
-}
-
-.tiny-note{font-size:11px;color:var(--muted);margin-top:8px}
+.tiny-note{font-size:calc(12px * var(--scale));color:var(--muted);margin-top:8px}
 
 /* hub */
 .hub{display:flex;flex-direction:column;gap:14px}
-.hub-header{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
-.hub-actions{display:flex;gap:8px}
+.hub-header{display:flex;flex-direction:column;gap:12px;padding:6px 0}
+.hub-actions{display:flex;gap:8px;align-items:center}
 
-/* categories */
-.category-row{display:flex;gap:10px;overflow-x:auto;padding:6px 0}
+/* new category grid: arranged as requested (All + Strength on top row; Cardio + Flexibility next row; Elderly + Special next row; then Start All shortcut) */
+.category-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:10px;
+  width:100%;
+  margin:6px 0;
+}
 
+/* pill style turned into big stacked buttons for mobile */
 .cat-pill{
-  flex:0 0 auto;
-  padding:10px 14px;
-  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px 14px;
+  border-radius:12px;
   background:#0f1318;
   border:1px solid var(--border);
-  min-width:120px;
   text-align:center;
-  font-weight:600;
+  font-weight:900;
   cursor:pointer;
   color:var(--muted);
   transition:.18s ease;
+  min-height:64px;
+  font-size:calc(16px * var(--scale));
 }
 
 .cat-pill.active{
   background:linear-gradient(90deg,var(--accent),var(--accent-soft));
   color:#120a06;
   border:0;
-  box-shadow:0 6px 20px var(--accent-glow);
+  box-shadow:0 10px 30px var(--accent-glow);
+}
+
+/* option to show a 'Start All' big button across full width */
+.cat-all-shortcut{
+  grid-column: 1 / -1;
+  background:linear-gradient(90deg,#23b14d,#1fb774);
+  color:#050505;
+  font-weight:900;
+  padding:16px;
+  border-radius:12px;
 }
 
 /* routines */
@@ -165,79 +174,66 @@ main.center-wrap{
 .routine-card{
   background:linear-gradient(180deg,#11161c,#0f1318);
   border-radius:14px;
-  padding:10px;
+  padding:12px;
   box-shadow:0 8px 22px rgba(0,0,0,.55);
   display:flex;
   flex-direction:column;
-  gap:8px;
+  gap:12px;
   text-decoration:none;
   color:inherit;
   border:1px solid var(--border);
   transition:.18s ease;
 }
 
-.routine-card:hover{
-  transform:translateY(-4px);
-  box-shadow:0 14px 30px rgba(0,0,0,.7);
-}
+.routine-title{font-weight:900;font-size:calc(18px * var(--scale));margin:0}
+.routine-meta{font-size:calc(12px * var(--scale));color:var(--muted)}
 
 .routine-thumb{
-  height:120px;
-  border-radius:10px;
+  height:160px;
+  border-radius:12px;
   background:#0b0e12;
   display:flex;
   align-items:center;
   justify-content:center;
   overflow:hidden;
   border:1px solid #222933;
+  position:relative;
 }
 
-.routine-title{font-weight:700;font-size:14px;margin:0}
-.routine-meta{font-size:12px;color:var(--muted)}
-
-.routine-actions{display:flex;gap:8px;align-items:center;justify-content:space-between}
-
-.save-btn{
-  padding:8px 10px;
-  border-radius:10px;
-  border:0;
-  background:linear-gradient(90deg,var(--accent),var(--accent-soft));
-  color:#120a06;
-  cursor:pointer;
-  font-weight:800;
+/* small indicator */
+.te-indicator {
+  position:absolute; top:10px; right:10px; width:14px; height:14px; border-radius:50%;
+  background: rgba(0,0,0,0.35); box-shadow: 0 1px 2px rgba(0,0,0,0.5); border:2px solid rgba(0,0,0,0.4);
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
 }
+.te-indicator.saved { background: #23b14d; box-shadow: 0 6px 18px rgba(35,177,77,0.18); }
+.te-indicator.playing { box-shadow: 0 10px 28px rgba(35,177,77,0.28); transform: scale(1.4); }
 
-.remove-btn{
-  padding:6px 8px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background:transparent;
-  color:var(--accent);
-  cursor:pointer;
+/* player modal + controls (kept large) */
+.te-modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.85); z-index:9999; padding:12px; }
+.te-player { width:100%; max-width:960px; background:#0f1318; border-radius:12px; padding:12px; box-sizing:border-box; box-shadow:0 30px 80px rgba(0,0,0,.7); }
+.te-player video { width:100%; height:auto; border-radius:8px; background:#000; display:block; }
+.te-overlay-count {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  font-size:calc(72px * var(--scale)); font-weight:900; color:#000; background:rgba(255,255,255,0.95);
+  padding:18px 30px; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.6);
+  display:none; z-index:10001; text-align:center;
 }
+.te-break { margin-top:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; color:#e6edf5; font-weight:900; }
+.te-break .count { font-size:calc(28px * var(--scale)); font-weight:900; color:var(--accent); }
+.te-controls { display:flex; gap:10px; }
+.te-btn { padding:12px 16px; border-radius:12px; border:0; cursor:pointer; font-weight:900; font-size:calc(16px * var(--scale)); }
+.te-skip { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.08); }
+.te-stop { background:linear-gradient(90deg,#ff5a2f,#ff8a4d); color:#120a06; }
 
-/* install banner */
-.install-banner{
-  position:fixed;
-  left:12px;
-  right:12px;
-  bottom:18px;
-  background:linear-gradient(180deg,#151a21,#10151b);
-  border-radius:14px;
-  padding:10px 14px;
-  box-shadow:0 18px 40px rgba(0,0,0,.7);
-  display:flex;
-  gap:12px;
-  align-items:center;
-  justify-content:space-between;
-  z-index:999;
-  border:1px solid var(--border);
-}
+/* playlist controls area */
+.player-settings { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+.player-settings select { padding:8px;border-radius:8px;border:1px solid var(--border); background:#0f1318;color:var(--text); font-size:calc(14px * var(--scale)); }
 
-.install-banner .msg{font-weight:700;color:var(--text)}
-
+/* responsive tweaks */
 @media(min-width:720px){
   .routine-grid{grid-template-columns:repeat(3,1fr)}
+  .category-grid{grid-template-columns:repeat(3,1fr)}
 }
 @media(min-width:1100px){
   .routine-grid{grid-template-columns:repeat(4,1fr)}
@@ -262,7 +258,6 @@ main.center-wrap{
         <input id="occupation" name="occupation" placeholder="Occupation (optional)" />
         <div class="actions">
           <button id="startBtn" class="btn primary" type="submit">Get started</button>
-          <!-- Guest option kept in DOM to avoid JS errors but disabled to enforce registration-first -->
           <button id="guestBtn" class="btn ghost" type="button" disabled title="Guest mode disabled — please register">Try as Guest</button>
         </div>
       </form>
@@ -274,18 +269,28 @@ main.center-wrap{
     <section id="hubSection" class="card hub" hidden>
       <header class="hub-header">
         <div>
-          <h2 id="welcomeText">Welcome</h2>
-          <p id="subText">Choose a routine to begin — offline-ready once saved.</p>
+          <h2 id="welcomeText" style="font-size:calc(18px * var(--scale));margin:0">Welcome</h2>
+          <p id="subText" style="font-size:calc(14px * var(--scale));margin:6px 0 0">Choose a routine to begin — offline-ready once saved.</p>
         </div>
-        <div class="hub-actions">
-          <button id="installBtn" class="btn ghost" style="display:none">Install App</button>
-          <!-- hide header actions until openHub reveals them -->
-          <button id="editProfile" class="btn" title="Edit profile" hidden>Edit Profile</button>
-          <button id="signOut" class="btn ghost" hidden>Sign out</button>
+
+        <!-- player quick settings (play length & break length) -->
+        <div class="hub-actions player-settings" aria-hidden="false" style="margin-top:6px;">
+          <label style="font-weight:900;font-size:calc(14px * var(--scale));">Duration:</label>
+          <select id="playLengthSelect" aria-label="Play length">
+            <option value="20">20s (default)</option>
+            <option value="60">1m</option>
+            <option value="120">2m</option>
+          </select>
+          <label style="font-weight:900;font-size:calc(14px * var(--scale));">Break:</label>
+          <select id="breakLengthSelect" aria-label="Break length">
+            <option value="10">10s (default)</option>
+            <option value="20">20s</option>
+            <option value="30">30s</option>
+          </select>
         </div>
       </header>
 
-      <div class="category-row" id="categoryRow" role="navigation" aria-label="Categories"></div>
+      <div class="category-grid" id="categoryRow" role="navigation" aria-label="Categories"></div>
 
       <div class="routine-grid" id="routineGrid" role="list"></div>
     </section>
@@ -305,14 +310,12 @@ main.center-wrap{
     (function(){
       try {
         const u = localStorage.getItem('te_user');
-        // if no user object, ensure auth is visible and hub hidden
         if(!u) {
           const auth = document.getElementById('authSection');
           const hub = document.getElementById('hubSection');
           if(auth) auth.hidden = false;
           if(hub) hub.hidden = true;
         } else {
-          // if a stored user exists but registered flag not true, still force auth
           try {
             const j = JSON.parse(u);
             if(!(j && j.registered)) {
@@ -329,7 +332,6 @@ main.center-wrap{
           }
         }
       } catch(e){
-        // silently ignore storage errors and default to auth visible
         const auth = document.getElementById('authSection');
         const hub = document.getElementById('hubSection');
         if(auth) auth.hidden = false;
@@ -345,4 +347,3 @@ main.center-wrap{
   </script>
 </body>
 </html>
-
