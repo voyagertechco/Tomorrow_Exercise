@@ -11,253 +11,391 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 
+  <!-- External stylesheet left as-is so you can keep global styles there -->
   <link rel="stylesheet" href="/static/css/styles.css">
-<style>
-/* ===== MOBILE-FIRST ENERGY FITNESS THEME (layout and sizes increased for accessibility) ===== */
 
-:root{
-  --accent:#ff5a2f;              /* main energy */
-  --accent-soft:#ff8a4d;
-  --accent-glow:rgba(255,90,47,.35);
-  --bg-main:#0e1116;
-  --bg-panel:#151a21;
-  --bg-card:#1b212a;
-  --border:#262e39;
-  --muted:#9aa4b2;
-  --text:#e6edf5;
+  <!-- Inline styles: mobile-first, very large accessibility scale, explicit and verbose -->
+  <style>
+  /* ===========================================================================
+     Tomorrow Exercise — Inline theme & mobile-first layout
+     This file intentionally includes many comments and explicit declarations to
+     make it verbose (so you can verify line counts and review every setting).
+     =========================================================================== */
 
-  /* accessibility scale */
-  --scale:1.9; /* multiply important UI by ~2 (you wanted ~5x — this is a large jump but remains usable on phones) */
-  --base-font:16px;
-}
+  :root{
+    /* --- color tokens --- */
+    --accent: #ff5a2f;
+    --accent-soft: #ff8a4d;
+    --accent-glow: rgba(255,90,47,.35);
 
-/* base */
-html,body{
-  height:100%;
-  margin:0;
-  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
-  background:radial-gradient(circle at 50% -20%, #1a1f27 0%, #0e1116 55%);
-  color:var(--text);
-  -webkit-font-smoothing:antialiased;
-  font-size: calc(var(--base-font) * 1); /* base */
-  -webkit-text-size-adjust: 100%;
-}
+    --bg-main: #0e1116;
+    --bg-panel: #151a21;
+    --bg-card: #1b212a;
+    --border: #262e39;
+    --muted: #9aa4b2;
+    --text: #e6edf5;
 
-/* make most interactive text much larger for readability on phone */
-.brand{font-weight:900;margin:0;font-size:calc(20px * var(--scale));letter-spacing:.6px}
-.tag{color:var(--muted);font-size:calc(13px * var(--scale));margin:8px 0 14px}
+    /* --- accessibility scale ---
+       You specifically asked for ~5x bigger UI. Set scale to 5.0.
+       This multiplies many font and padding calculations below.
+    */
+    --scale: 5.0;
+    --base-font: 16px;
+  }
 
-/* card + layout */
-main.center-wrap{
-  min-height:100vh;
-  display:flex;
-  align-items:flex-start;
-  justify-content:center;
-  padding:20px 14px;
-  box-sizing:border-box
-}
+  /* ===========================================================================
+     Base / Reset
+     - mobile-first layout
+     - high font-size to meet accessibility requirement
+  =========================================================================== */
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(circle at 50% -20%, #1a1f27 0%, var(--bg-main) 55%);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    font-size: calc(var(--base-font) * 1);
+    -webkit-text-size-adjust: 100%;
+    box-sizing: border-box;
+  }
 
-.card{
-  background:linear-gradient(180deg,var(--bg-panel),var(--bg-card));
-  border-radius:16px;
-  box-shadow:
-    0 18px 45px rgba(0,0,0,.65),
-    inset 0 1px 0 rgba(255,255,255,.03);
-  border:1px solid var(--border);
-  padding:18px;
-  width:100%;
-  max-width:920px;
-  box-sizing:border-box
-}
+  /* Utility: inherit box-sizing */
+  *, *::before, *::after { box-sizing: inherit; }
 
-.auth-card{max-width:520px;margin:12px auto;text-align:center}
+  /* ===========================================================================
+     Layout container
+     - center on desktop, top-aligned on mobile
+  =========================================================================== */
+  main.center-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start; /* keep top aligned so very large UI doesn't center awkwardly */
+    justify-content: center;
+    padding: calc(18px * 1) ;
+    box-sizing: border-box;
+  }
 
-/* inputs */
-.auth-form input,
-.auth-form textarea,
-.auth-form select{
-  width:100%;
-  padding:14px;
-  border:1px solid var(--border);
-  border-radius:12px;
-  margin-bottom:10px;
-  font-size:calc(16px * var(--scale));
-  background:#0f1318;
-  color:var(--text);
-  transition:.18s ease;
-}
+  /* ===========================================================================
+     Card component (used for auth + hub)
+  =========================================================================== */
+  .card {
+    background: linear-gradient(180deg, var(--bg-panel), var(--bg-card));
+    border-radius: 16px;
+    box-shadow: 0 18px 45px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    padding: calc(18px * var(--scale));
+    width: 100%;
+    max-width: 920px;
+    box-sizing: border-box;
+  }
 
-.auth-form input::placeholder{color:#6f7a88}
+  /* ===========================================================================
+     Branding — extremely large per request
+  =========================================================================== */
+  .brand {
+    font-weight: 900;
+    margin: 0;
+    font-size: calc(20px * var(--scale));
+    letter-spacing: 0.6px;
+    line-height: 1.05;
+  }
 
-/* buttons */
-.actions{display:flex;gap:10px;flex-direction:column}
+  .brand .accent {
+    color: var(--accent);
+    text-shadow: 0 0 14px var(--accent-glow);
+  }
 
-.btn{
-  padding:14px 16px;
-  border-radius:14px;
-  border:0;
-  font-weight:800;
-  cursor:pointer;
-  letter-spacing:.3px;
-  transition:.12s ease;
-  font-size:calc(16px * var(--scale));
-}
+  .tag {
+    color: var(--muted);
+    font-size: calc(13px * var(--scale));
+    margin: calc(8px * 1) 0 calc(14px * 1);
+  }
 
-.btn.primary{
-  background:linear-gradient(90deg,var(--accent),var(--accent-soft));
-  color:#120a06;
-  box-shadow:0 8px 28px var(--accent-glow);
-}
+  /* ===========================================================================
+     Auth card specifics
+     Keep fields large and touch-friendly
+  =========================================================================== */
+  .auth-card { max-width: 720px; margin: 12px auto; text-align: center; }
 
-.btn.primary:active{transform:scale(.98)}
+  .auth-form input,
+  .auth-form textarea,
+  .auth-form select {
+    width: 100%;
+    padding: calc(12px * var(--scale));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: calc(10px * 1);
+    font-size: calc(16px * var(--scale));
+    background: #0f1318;
+    color: var(--text);
+    transition: .18s ease;
+  }
 
-.btn.ghost{
-  background:transparent;
-  border:1px solid var(--border);
-  color:var(--accent);
-}
+  .auth-form input::placeholder { color: #6f7a88; }
 
-.tiny-note{font-size:calc(12px * var(--scale));color:var(--muted);margin-top:8px}
+  .row { display: flex; gap: 12px; }
+  .row input { flex: 1; }
 
-/* hub */
-.hub{display:flex;flex-direction:column;gap:14px}
-.hub-header{display:flex;flex-direction:column;gap:12px;padding:6px 0}
-.hub-actions{display:flex;gap:8px;align-items:center}
+  /* ===========================================================================
+     Buttons — huge and touch-optimized
+  =========================================================================== */
+  .actions { display: flex; gap: 12px; flex-direction: column; align-items: stretch; }
+  .btn {
+    padding: calc(12px * var(--scale)) calc(18px * var(--scale));
+    border-radius: 14px;
+    border: 0;
+    font-weight: 900;
+    cursor: pointer;
+    letter-spacing: .3px;
+    transition: .12s ease;
+    font-size: calc(18px * var(--scale));
+  }
+  .btn.primary {
+    background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+    color: #120a06;
+    box-shadow: 0 8px 28px var(--accent-glow);
+  }
+  .btn.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
 
-/* new category grid: arranged as requested (All + Strength on top row; Cardio + Flexibility next row; Elderly + Special next row; then Start All shortcut) */
-.category-grid{
-  display:grid;
-  grid-template-columns:repeat(2, 1fr);
-  gap:10px;
-  width:100%;
-  margin:6px 0;
-}
+  .tiny-note { font-size: calc(12px * var(--scale)); color: var(--muted); margin-top: 8px; }
 
-/* pill style turned into big stacked buttons for mobile */
-.cat-pill{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:16px 14px;
-  border-radius:12px;
-  background:#0f1318;
-  border:1px solid var(--border);
-  text-align:center;
-  font-weight:900;
-  cursor:pointer;
-  color:var(--muted);
-  transition:.18s ease;
-  min-height:64px;
-  font-size:calc(16px * var(--scale));
-}
+  /* ===========================================================================
+     HUB / Categories — arranged exactly as requested
+     Row 1: All | Strength
+     Row 2: Cardio | Flexibility
+     Row 3: Elderly | Special
+     Row 4: Start All (full width)
+  =========================================================================== */
+  .hub { display: flex; flex-direction: column; gap: calc(12px * 1); }
+  .hub-header { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
 
-.cat-pill.active{
-  background:linear-gradient(90deg,var(--accent),var(--accent-soft));
-  color:#120a06;
-  border:0;
-  box-shadow:0 10px 30px var(--accent-glow);
-}
+  .player-settings { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .player-settings label { font-weight: 900; font-size: calc(14px * var(--scale)); }
+  .player-settings select { padding: calc(6px * var(--scale)); border-radius: 10px; border: 1px solid var(--border); background: #0f1318; color: var(--text); font-size: calc(14px * var(--scale)); }
 
-/* option to show a 'Start All' big button across full width */
-.cat-all-shortcut{
-  grid-column: 1 / -1;
-  background:linear-gradient(90deg,#23b14d,#1fb774);
-  color:#050505;
-  font-weight:900;
-  padding:16px;
-  border-radius:12px;
-}
+  .category-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: calc(10px * 1);
+    width: 100%;
+    margin: calc(6px * 1) 0;
+  }
 
-/* routines */
-.routine-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .cat-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: calc(12px * var(--scale));
+    border-radius: 12px;
+    background: #0f1318;
+    border: 1px solid var(--border);
+    text-align: center;
+    font-weight: 900;
+    cursor: pointer;
+    color: var(--muted);
+    transition: .18s ease;
+    min-height: calc(56px * 1);
+    font-size: calc(18px * var(--scale));
+  }
 
-.routine-card{
-  background:linear-gradient(180deg,#11161c,#0f1318);
-  border-radius:14px;
-  padding:12px;
-  box-shadow:0 8px 22px rgba(0,0,0,.55);
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  text-decoration:none;
-  color:inherit;
-  border:1px solid var(--border);
-  transition:.18s ease;
-}
+  .cat-pill.active {
+    background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+    color: #120a06;
+    border: 0;
+    box-shadow: 0 10px 30px var(--accent-glow);
+  }
 
-.routine-title{font-weight:900;font-size:calc(18px * var(--scale));margin:0}
-.routine-meta{font-size:calc(12px * var(--scale));color:var(--muted)}
+  .cat-all-shortcut {
+    grid-column: 1 / -1;
+    background: linear-gradient(90deg,#23b14d,#1fb774);
+    color: #050505;
+    font-weight: 900;
+    padding: calc(12px * var(--scale));
+    border-radius: 12px;
+    font-size: calc(20px * var(--scale));
+    text-align: center;
+  }
 
-.routine-thumb{
-  height:160px;
-  border-radius:12px;
-  background:#0b0e12;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  border:1px solid #222933;
-  position:relative;
-}
+  /* ===========================================================================
+     Routines grid & cards
+  =========================================================================== */
+  .routine-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: calc(12px * 1);
+  }
 
-/* small indicator */
-.te-indicator {
-  position:absolute; top:10px; right:10px; width:14px; height:14px; border-radius:50%;
-  background: rgba(0,0,0,0.35); box-shadow: 0 1px 2px rgba(0,0,0,0.5); border:2px solid rgba(0,0,0,0.4);
-  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
-}
-.te-indicator.saved { background: #23b14d; box-shadow: 0 6px 18px rgba(35,177,77,0.18); }
-.te-indicator.playing { box-shadow: 0 10px 28px rgba(35,177,77,0.28); transform: scale(1.4); }
+  .routine-card {
+    background: linear-gradient(180deg,#11161c,#0f1318);
+    border-radius: 14px;
+    padding: calc(12px * 1);
+    box-shadow: 0 8px 22px rgba(0,0,0,.55);
+    display: flex;
+    flex-direction: column;
+    gap: calc(12px * 1);
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--border);
+    transition: .18s ease;
+  }
 
-/* player modal + controls (kept large) */
-.te-modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.85); z-index:9999; padding:12px; }
-.te-player { width:100%; max-width:960px; background:#0f1318; border-radius:12px; padding:12px; box-sizing:border-box; box-shadow:0 30px 80px rgba(0,0,0,.7); }
-.te-player video { width:100%; height:auto; border-radius:8px; background:#000; display:block; }
-.te-overlay-count {
-  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  font-size:calc(72px * var(--scale)); font-weight:900; color:#000; background:rgba(255,255,255,0.95);
-  padding:18px 30px; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.6);
-  display:none; z-index:10001; text-align:center;
-}
-.te-break { margin-top:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; color:#e6edf5; font-weight:900; }
-.te-break .count { font-size:calc(28px * var(--scale)); font-weight:900; color:var(--accent); }
-.te-controls { display:flex; gap:10px; }
-.te-btn { padding:12px 16px; border-radius:12px; border:0; cursor:pointer; font-weight:900; font-size:calc(16px * var(--scale)); }
-.te-skip { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.08); }
-.te-stop { background:linear-gradient(90deg,#ff5a2f,#ff8a4d); color:#120a06; }
+  .routine-title { font-weight: 900; font-size: calc(18px * var(--scale)); margin: 0; }
+  .routine-meta { font-size: calc(12px * var(--scale)); color: var(--muted); }
 
-/* playlist controls area */
-.player-settings { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
-.player-settings select { padding:8px;border-radius:8px;border:1px solid var(--border); background:#0f1318;color:var(--text); font-size:calc(14px * var(--scale)); }
+  .routine-thumb {
+    height: calc(180px * 1);
+    border-radius: 12px;
+    background: #0b0e12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #222933;
+    position: relative;
+  }
 
-/* responsive tweaks */
-@media(min-width:720px){
-  .routine-grid{grid-template-columns:repeat(3,1fr)}
-  .category-grid{grid-template-columns:repeat(3,1fr)}
-}
-@media(min-width:1100px){
-  .routine-grid{grid-template-columns:repeat(4,1fr)}
-  .auth-card{max-width:720px}
-}
-</style>
+  .te-indicator {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    border: 2px solid rgba(0,0,0,0.4);
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+
+  .te-indicator.saved { background: #23b14d; box-shadow: 0 6px 18px rgba(35,177,77,0.18); }
+  .te-indicator.playing { box-shadow: 0 10px 28px rgba(35,177,77,0.28); transform: scale(1.4); }
+
+  /* ===========================================================================
+     Player modal: large overlay + custom controls (no native fullscreen / download)
+  =========================================================================== */
+  .te-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9);
+    z-index: 9999;
+    padding: 12px;
+  }
+
+  .te-player {
+    width: 100%;
+    max-width: 1100px;
+    background: #0f1318;
+    border-radius: 12px;
+    padding: calc(12px * 1);
+    box-sizing: border-box;
+    box-shadow: 0 30px 80px rgba(0,0,0,.7);
+  }
+
+  .te-player video {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    background: #000;
+    display: block;
+  }
+
+  .te-overlay-count {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    font-size: calc(80px * var(--scale));
+    font-weight: 900;
+    color: #000;
+    background: rgba(255,255,255,0.95);
+    padding: calc(18px * 1) calc(30px * 1);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.6);
+    display: none;
+    z-index: 10001;
+    text-align: center;
+  }
+
+  .te-break {
+    margin-top: 12px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    color: #e6edf5;
+    font-weight: 900;
+  }
+
+  .te-break .count { font-size: calc(28px * var(--scale)); font-weight: 900; color: var(--accent); }
+
+  .te-controls { display: flex; gap: 12px; align-items: center; }
+  .te-btn { padding: calc(10px * var(--scale)) calc(12px * var(--scale)); border-radius: 12px; border: 0; cursor: pointer; font-weight: 900; font-size: calc(16px * var(--scale)); }
+  .te-skip { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.08); }
+  .te-stop { background: linear-gradient(90deg,#ff5a2f,#ff8a4d); color: #120a06; }
+  .te-playpause { background: linear-gradient(90deg,#0b6efd,#1466ff); color: #fff; }
+
+  /* rotate fallback class used when screen.orientation.lock not available */
+  .rotate-landscape { transform-origin: center center; transform: rotate(90deg) scale(1.4); }
+
+  /* ===========================================================================
+     Responsive pieces: keep grid expanding on wide screens
+  =========================================================================== */
+  @media (min-width: 720px) {
+    .routine-grid { grid-template-columns: repeat(3, 1fr); }
+    .category-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  @media (min-width: 1100px) {
+    .routine-grid { grid-template-columns: repeat(4, 1fr); }
+    .auth-card { max-width: 720px; }
+  }
+
+  /* ========================================================================
+     Additional developer notes:
+     - This index is intentionally verbose (more comments, clearer declarations).
+     - The actual runtime behavior of the player, offline saving, and SW is in
+       static/js/main.js and static/js/idb.js / static/js/sw.js. Keep those files.
+     ======================================================================== */
+  </style>
 
 </head>
 <body>
+  <!-- ===========================================================================
+       App root: includes AUTH then HUB (hub hidden until registration completes)
+       =========================================================================== -->
   <main class="center-wrap" id="appRoot">
-    <!-- AUTH -->
+
+    <!-- =========================
+         AUTH SECTION (VISIBLE by default until registered)
+         - username, age, country, occupation
+         - large inputs for accessibility
+         ========================= -->
     <section id="authSection" class="card auth-card" aria-labelledby="brandTitle">
       <h1 id="brandTitle" class="brand">Tomorrow <span class="accent">Exercise</span></h1>
       <p class="tag">Move. Breathe. Become tomorrow’s best you.</p>
 
-      <form id="authForm" class="auth-form" autocomplete="off">
-        <input id="username" name="username" placeholder="Username" required />
-        <div class="row">
-          <input id="age" name="age" type="number" placeholder="Age" min="8" max="120" required />
-          <input id="country" name="country" placeholder="Country" required />
+      <form id="authForm" class="auth-form" autocomplete="off" novalidate>
+        <!-- Large input fields for mobile-first and visibility -->
+        <input id="username" name="username" placeholder="Username" required aria-label="Username" />
+        <div class="row" style="margin-top: calc(6px * 1);">
+          <input id="age" name="age" type="number" placeholder="Age" min="8" max="120" required aria-label="Age" />
+          <input id="country" name="country" placeholder="Country" required aria-label="Country" />
         </div>
-        <input id="occupation" name="occupation" placeholder="Occupation (optional)" />
-        <div class="actions">
+
+        <input id="occupation" name="occupation" placeholder="Occupation (optional)" aria-label="Occupation" />
+
+        <div class="actions" style="margin-top: calc(10px * 1);">
           <button id="startBtn" class="btn primary" type="submit">Get started</button>
+          <!-- Guest option kept in DOM to avoid JS errors but disabled by default -->
           <button id="guestBtn" class="btn ghost" type="button" disabled title="Guest mode disabled — please register">Try as Guest</button>
         </div>
       </form>
@@ -265,23 +403,29 @@ main.center-wrap{
       <p class="tiny-note">By continuing you accept the offline-first experience. Registration is required to access routines.</p>
     </section>
 
-    <!-- HUB (hidden until registration completes) -->
+    <!-- =========================
+         HUB SECTION (HIDDEN until registration completes)
+         - categories (arranged as requested)
+         - routine grid
+         - player quick settings (duration & break)
+         ========================= -->
     <section id="hubSection" class="card hub" hidden>
       <header class="hub-header">
         <div>
-          <h2 id="welcomeText" style="font-size:calc(18px * var(--scale));margin:0">Welcome</h2>
-          <p id="subText" style="font-size:calc(14px * var(--scale));margin:6px 0 0">Choose a routine to begin — offline-ready once saved.</p>
+          <h2 id="welcomeText" style="font-size: calc(18px * var(--scale)); margin: 0;">Welcome</h2>
+          <p id="subText" style="font-size: calc(14px * var(--scale)); margin: 6px 0 0;">Choose a routine to begin — offline-ready once saved.</p>
         </div>
 
-        <!-- player quick settings (play length & break length) -->
-        <div class="hub-actions player-settings" aria-hidden="false" style="margin-top:6px;">
-          <label style="font-weight:900;font-size:calc(14px * var(--scale));">Duration:</label>
+        <!-- Player quick settings -->
+        <div class="player-settings" style="margin-top: calc(10px * 1);">
+          <label for="playLengthSelect">Duration:</label>
           <select id="playLengthSelect" aria-label="Play length">
             <option value="20">20s (default)</option>
             <option value="60">1m</option>
             <option value="120">2m</option>
           </select>
-          <label style="font-weight:900;font-size:calc(14px * var(--scale));">Break:</label>
+
+          <label for="breakLengthSelect">Break:</label>
           <select id="breakLengthSelect" aria-label="Break length">
             <option value="10">10s (default)</option>
             <option value="20">20s</option>
@@ -290,60 +434,56 @@ main.center-wrap{
         </div>
       </header>
 
-      <div class="category-grid" id="categoryRow" role="navigation" aria-label="Categories"></div>
+      <!-- Categories grid (script will populate these buttons) -->
+      <div id="categoryRow" class="category-grid" role="navigation" aria-label="Categories"></div>
 
-      <div class="routine-grid" id="routineGrid" role="list"></div>
+      <!-- Routines grid (script will render routine cards here) -->
+      <div id="routineGrid" class="routine-grid" role="list"></div>
     </section>
+
   </main>
 
-  <!-- Install banner (hidden by default) -->
+  <!-- Install banner (hidden by default; shown by main.js on beforeinstallprompt or fallback) -->
   <div id="installBanner" class="install-banner" style="display:none;">
-    <div class="msg">Install Tomorrow Exercise for an app-like experience.</div>
-    <div class="actions">
+    <div class="msg" style="font-weight:900; font-size: calc(16px * var(--scale));">Install Tomorrow Exercise for an app-like experience.</div>
+    <div class="actions" style="display:flex; gap:12px;">
       <button id="bannerInstall" class="btn primary">Install</button>
       <button id="bannerDismiss" class="btn ghost">Maybe later</button>
     </div>
   </div>
 
-  <!-- small inline guard: ensure hub is hidden unless a user exists in localStorage -->
+  <!-- Small guard: ensure hub hidden unless a user exists in localStorage -->
   <script>
     (function(){
       try {
         const u = localStorage.getItem('te_user');
-        if(!u) {
-          const auth = document.getElementById('authSection');
-          const hub = document.getElementById('hubSection');
-          if(auth) auth.hidden = false;
-          if(hub) hub.hidden = true;
+        if (!u) {
+          document.getElementById('authSection').hidden = false;
+          document.getElementById('hubSection').hidden = true;
         } else {
           try {
             const j = JSON.parse(u);
-            if(!(j && j.registered)) {
-              const auth = document.getElementById('authSection');
-              const hub = document.getElementById('hubSection');
-              if(auth) auth.hidden = false;
-              if(hub) hub.hidden = true;
+            if (!(j && j.registered)) {
+              document.getElementById('authSection').hidden = false;
+              document.getElementById('hubSection').hidden = true;
             }
-          } catch(e){
-            const auth = document.getElementById('authSection');
-            const hub = document.getElementById('hubSection');
-            if(auth) auth.hidden = false;
-            if(hub) hub.hidden = true;
+          } catch(e) {
+            document.getElementById('authSection').hidden = false;
+            document.getElementById('hubSection').hidden = true;
           }
         }
-      } catch(e){
-        const auth = document.getElementById('authSection');
-        const hub = document.getElementById('hubSection');
-        if(auth) auth.hidden = false;
-        if(hub) hub.hidden = true;
+      } catch(e) {
+        try { document.getElementById('authSection').hidden = false; document.getElementById('hubSection').hidden = true; } catch(e){}
       }
     })();
   </script>
 
+  <!-- Keep your idb and main logic separate -->
   <script src="/static/js/idb.js"></script>
   <script src="/static/js/main.js"></script>
-  <script>
-    // service worker registration is handled inside main.js already
-  </script>
+
+  <!-- Small note for maintainers: the main runtime behavior (playlist logic, play/break timers,
+       saving to IndexedDB, service worker registration) lives in static/js/main.js.
+       If you want the very verbose main.js as well, tell me and I'll paste it expanded. -->
 </body>
 </html>
